@@ -2,6 +2,9 @@ const projectService = require('../services/projectService');
 
 const createProject = async (req, res) => {
     try {
+        if (!req.user) {
+            return res.status(401).json({ message: 'User not authenticated' });
+        }
         const project = await projectService.createProject(req.body, req.user._id);
         res.status(201).json(project);
     } catch (error) {

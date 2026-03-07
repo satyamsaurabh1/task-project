@@ -129,4 +129,15 @@ const ProjectDetails = () => {
                                                 <option value="completed">Completed</option>
                                             </select>
                                         </div>
-                     
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </main>
+        </div>
+    );
+};
+
+export default ProjectDetails;

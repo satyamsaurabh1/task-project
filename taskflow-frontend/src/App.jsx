@@ -52,4 +52,15 @@ function App() {
             </ProtectedRoute>
           } />
 
-          <Route path="/projects/:id/tas
+          <Route path="/projects/:id/tasks/:taskId/edit" element={
+            <ProtectedRoute>
+              <EditTask />
+            </ProtectedRoute>
+          } />
+        </Routes>
+      </Router>
+    </AuthProvider>
+  );
+}
+
+export default App;

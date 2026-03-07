@@ -176,4 +176,41 @@ body {
   backdrop-filter: blur(4px);
   padding: 1.5rem;
   border-radius: 0.75rem;
-  box-shadow: var(-
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  transition: transform 0.2s;
+}
+
+.stat-card:hover {
+  transform: scale(1.05);
+}
+
+/* Kanban Styles */
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.kanban-column {
+  background: #f1f5f9;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  min-height: 500px;
+}
+
+.task-card {
+  background: white;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  margin-bottom: 1rem;
+  transition: all 0.2s;
+  border-left: 4px solid transparent;
+}
+
+.task-card:hover {
+  box-shadow: var(--shadow);
+  border-left-color: var(--primary);
+}

@@ -100,4 +100,22 @@ const Dashboard = () => {
 
                 <h2 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '1rem' }}>Recent Projects</h2>
                 <div className="project-grid">
-        
+                    {filteredProjects.map(project => (
+                        <Link to={`/projects/${project._id}`} key={project._id} style={{ textDecoration: 'none', color: 'inherit' }}>
+                            <div className="project-card">
+                                <h3 style={{ fontWeight: '600', marginBottom: '0.5rem' }}>{project.title}</h3>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1rem' }}>{project.description}</p>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
+                                    <span>{project.members?.length + 1} Members</span>
+                                    <span>Created {new Date(project.createdAt).toLocaleDateString()}</span>
+                                </div>
+                            </div>
+                        </Link>
+                    ))}
+                </div>
+            </main>
+        </div>
+    );
+};
+
+export default Dashboard;
