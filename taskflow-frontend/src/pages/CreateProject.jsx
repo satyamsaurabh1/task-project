@@ -1,58 +1,102 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import api from '../services/api';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ChevronLeft } from 'lucide-react';
+import AppShell from '../components/AppShell';
+import FormField from '../components/FormField';
+import useAsyncAction from '../hooks/useAsyncAction';
+import { getUsers } from '../services/authService';
+import { createProject } from '../services/projectService';
+import { validateProjectForm } from '../utils/validation';
 
 const CreateProject = () => {
-    const [title, setTitle] = useState('');
-    const [description, setDescription] = useState('');
     const navigate = useNavigate();
+    const { loading, run } = useAsyncAction();
+    const [users, setUsers] = useState([]);
+    const [formData, setFormData] = useState({
+        title: '',
+        description: '',
+        members: []
+    });
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    useEffect(() => {
+        const loadUsers = async () => {
+            try {
+                setUsers(await getUsers());
+            } catch {
+                toast.error('Failed to load members');
+            }
+        };
+
+        loadUsers();
+    }, []);
+
+    const handleMemberSelection = (event) => {
+        const selectedIds = Array.from(event.target.selectedOptions).map((option) => option.value);
+        setFormData((current) => ({ ...current, members: selectedIds }));
+    };
+
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        const message = validateProjectForm(formData);
+
+        if (message) {
+            toast.error(message);
+            return;
+        }
+
         try {
-            await api.post('/projects', { title, description });
-            toast.success('Project created!');
-            navigate('/');
-        } catch (err) {
-            toast.error('Failed to create project');
+            const project = await run(() => createProject(formData));
+            toast.success('Project created');
+            navigate(`/projects/${project._id}`);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to create project');
         }
     };
 
     return (
-        <div className="main-content" style={{ maxWidth: '600px', margin: '0 auto' }}>
-            <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem', textDecoration: 'none', color: 'var(--text-muted)' }}>
-                <ChevronLeft size={20} /> Back to Dashboard
-            </Link>
-            <div className="auth-card" style={{ maxWidth: 'none' }}>
-                <h1 className="auth-title" style={{ textAlign: 'left' }}>Create New Project</h1>
-                <p className="auth-subtitle" style={{ textAlign: 'left' }}>Set up a new workspace for your team</p>
-                <form onSubmit={handleSubmit}>
-                    <div className="form-group">
-                        <label className="form-label">Project Title</label>
+        <AppShell
+            title="Create project"
+            subtitle="Define a workspace, write context, and add collaborators from the start."
+        >
+            <section className="form-panel">
+                <form className="form-stack" onSubmit={handleSubmit}>
+                    <FormField label="Project title">
                         <input
-                            type="text"
-                            className="form-input"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            required
+                            className="text-input"
+                            value={formData.title}
+                            onChange={(event) => setFormData((current) => ({ ...current, title: event.target.value }))}
                         />
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label">Description</label>
+                    </FormField>
+
+                    <FormField label="Description">
                         <textarea
-                            className="form-input"
-                            style={{ minHeight: '100px', resize: 'vertical' }}
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            required
+                            className="text-input textarea-input"
+                            value={formData.description}
+                            onChange={(event) => setFormData((current) => ({ ...current, description: event.target.value }))}
                         />
-                    </div>
-                    <button type="submit" className="btn btn-primary">Create Project</button>
+                    </FormField>
+
+                    <FormField label="Members">
+                        <select
+                            multiple
+                            className="text-input select-multiple"
+                            value={formData.members}
+                            onChange={handleMemberSelection}
+                        >
+                            {users.map((user) => (
+                                <option key={user._id} value={user._id}>
+                                    {user.name} ({user.email})
+                                </option>
+                            ))}
+                        </select>
+                    </FormField>
+
+                    <button className="primary-button" type="submit" disabled={loading}>
+                        {loading ? 'Creating project...' : 'Create project'}
+                    </button>
                 </form>
-            </div>
-        </div>
+            </section>
+        </AppShell>
     );
 };
 

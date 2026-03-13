@@ -1,18 +1,20 @@
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import useAuth from '../hooks/useAuth';
+import Loader from './Loader';
 
-const ProtectedRoute = ({ children }) => {
-    const { user, loading } = useAuth();
+const ProtectedRoute = () => {
+    const { initializing, user } = useAuth();
+    const location = useLocation();
 
-    if (loading) {
-        return <div>Loading...</div>;
+    if (initializing) {
+        return <Loader fullScreen label="Restoring your workspace" />;
     }
 
     if (!user) {
-        return <Navigate to="/login" />;
+        return <Navigate to="/login" replace state={{ from: location }} />;
     }
 
-    return children;
+    return <Outlet />;
 };
 
 export default ProtectedRoute;

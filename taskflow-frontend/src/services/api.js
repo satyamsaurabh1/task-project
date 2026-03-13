@@ -1,31 +1,28 @@
 import axios from 'axios';
+import { clearStoredUser, getStoredUser } from '../utils/storage';
 
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL
+    baseURL: import.meta.env.VITE_API_URL,
+    timeout: 10000,
 });
 
-// Add a request interceptor to include JWT token
-api.interceptors.request.use(
-    (config) => {
-        const user = JSON.parse(localStorage.getItem('user'));
-        if (user && user.token) {
-            config.headers.Authorization = `Bearer ${user.token}`;
-        }
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
-    }
-);
+api.interceptors.request.use((config) => {
+    const user = getStoredUser();
 
-// Add a response interceptor to handle errors
+    if (user?.token) {
+        config.headers.Authorization = `Bearer ${user.token}`;
+    }
+
+    return config;
+});
+
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response && error.response.status === 401) {
-            localStorage.removeItem('user');
-            window.location.href = '/login';
+        if (error.response?.status === 401) {
+            clearStoredUser();
         }
+
         return Promise.reject(error);
     }
 );

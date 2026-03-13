@@ -1,62 +1,51 @@
 const User = require('../models/User');
-const { generateToken } = require('../utils/token');
+const ApiError = require('../utils/apiError');
+const { generateAccessToken } = require('../utils/jwt');
 
-const registerUser = async (userData) => {
-    const { name, email, password, role } = userData;
+const formatAuthResponse = (user) => ({
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    token: generateAccessToken({ id: user._id, role: user.role })
+});
 
-    const userExists = await User.findOne({ email });
+const registerUser = async ({ name, email, password, role }) => {
+    const existingUser = await User.findOne({ email });
 
-    if (userExists) {
-        throw new Error('User already exists');
+    if (existingUser) {
+        throw new ApiError(409, 'A user with this email already exists');
     }
 
-    const user = await User.create({
-        name,
-        email,
-        password,
-        role
-    });
-
-    if (user) {
-        return {
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            token: generateToken(user._id)
-        };
-    } else {
-        throw new Error('Invalid user data');
-    }
+    const user = await User.create({ name, email, password, role });
+    return formatAuthResponse(user);
 };
 
-const loginUser = async (email, password) => {
+const loginUser = async ({ email, password }) => {
     const user = await User.findOne({ email }).select('+password');
 
-    if (user && (await user.matchPassword(password))) {
-        return {
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            token: generateToken(user._id)
-        };
-    } else {
-        throw new Error('Invalid email or password');
+    if (!user || !(await user.comparePassword(password))) {
+        throw new ApiError(401, 'Invalid email or password');
     }
+
+    return formatAuthResponse(user);
 };
 
-const getUserProfile = async (id) => {
-    const user = await User.findById(id);
-    if (user) {
-        return user;
-    } else {
-        throw new Error('User not found');
+const getCurrentUser = async (userId) => {
+    const user = await User.findById(userId).select('-password');
+
+    if (!user) {
+        throw new ApiError(404, 'User not found');
     }
+
+    return user;
 };
+
+const getUsers = async () => User.find({}, 'name email role createdAt').sort({ name: 1 });
 
 module.exports = {
-    registerUser,
+    getCurrentUser,
+    getUsers,
     loginUser,
-    getUserProfile
+    registerUser
 };

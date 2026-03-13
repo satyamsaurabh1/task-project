@@ -1,124 +1,134 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
-import api from '../services/api';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ChevronLeft } from 'lucide-react';
+import AppShell from '../components/AppShell';
+import FormField from '../components/FormField';
+import Loader from '../components/Loader';
+import useAsyncAction from '../hooks/useAsyncAction';
+import { getUsers } from '../services/authService';
+import { getTaskById, updateTask } from '../services/taskService';
+import { validateTaskForm } from '../utils/validation';
 
 const EditTask = () => {
     const { id, taskId } = useParams();
+    const navigate = useNavigate();
+    const { loading, run } = useAsyncAction();
+    const [users, setUsers] = useState([]);
+    const [fetching, setFetching] = useState(true);
     const [formData, setFormData] = useState({
         title: '',
         description: '',
-        status: '',
-        priority: '',
-        dueDate: ''
+        status: 'pending',
+        priority: 'medium',
+        dueDate: '',
+        assignedTo: ''
     });
-    const [loading, setLoading] = useState(true);
-    const navigate = useNavigate();
 
     useEffect(() => {
-        const fetchTask = async () => {
+        const loadTask = async () => {
             try {
-                const res = await api.get(`/projects/${id}/tasks`);
-                const task = res.data.find(t => t._id === taskId);
-                if (task) {
-                    setFormData({
-                        title: task.title,
-                        description: task.description,
-                        status: task.status,
-                        priority: task.priority,
-                        dueDate: task.dueDate ? task.dueDate.split('T')[0] : ''
-                    });
-                }
-                setLoading(false);
-            } catch (err) {
+                const [task, teamMembers] = await Promise.all([
+                    getTaskById(id, taskId),
+                    getUsers()
+                ]);
+
+                setUsers(teamMembers);
+                setFormData({
+                    title: task.title,
+                    description: task.description,
+                    status: task.status,
+                    priority: task.priority,
+                    dueDate: task.dueDate ? task.dueDate.split('T')[0] : '',
+                    assignedTo: task.assignedTo?._id || ''
+                });
+            } catch {
                 toast.error('Failed to load task');
-                setLoading(false);
+            } finally {
+                setFetching(false);
             }
         };
-        fetchTask();
+
+        loadTask();
     }, [id, taskId]);
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const handleChange = (event) => {
+        setFormData((current) => ({ ...current, [event.target.name]: event.target.value }));
+    };
+
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        const message = validateTaskForm(formData);
+
+        if (message) {
+            toast.error(message);
+            return;
+        }
+
         try {
-            await api.put(`/projects/${id}/tasks/${taskId}`, formData);
-            toast.success('Task updated!');
+            await run(() => updateTask(id, taskId, formData));
+            toast.success('Task updated');
             navigate(`/projects/${id}`);
-        } catch (err) {
-            toast.error('Failed to update task');
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Failed to update task');
         }
     };
 
-    if (loading) return <div className="main-content">Loading...</div>;
-
     return (
-        <div className="main-content" style={{ maxWidth: '600px', margin: '0 auto' }}>
-            <Link to={`/projects/${id}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem', textDecoration: 'none', color: 'var(--text-muted)' }}>
-                <ChevronLeft size={20} /> Back to Project
-            </Link>
-            <div className="auth-card" style={{ maxWidth: 'none' }}>
-                <h1 className="auth-title" style={{ textAlign: 'left' }}>Edit Task</h1>
-                <form onSubmit={handleSubmit}>
-                    <div className="form-group">
-                        <label className="form-label">Task Title</label>
-                        <input
-                            type="text"
-                            className="form-input"
-                            value={formData.title}
-                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                            required
-                        />
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label">Description</label>
-                        <textarea
-                            className="form-input"
-                            style={{ minHeight: '80px' }}
-                            value={formData.description}
-                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                            required
-                        />
-                    </div>
-                    <div className="form-group" style={{ display: 'flex', gap: '1rem' }}>
-                        <div style={{ flex: 1 }}>
-                            <label className="form-label">Status</label>
-                            <select
-                                className="form-input"
-                                value={formData.status}
-                                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                            >
-                                <option value="pending">Pending</option>
-                                <option value="in-progress">In Progress</option>
-                                <option value="completed">Completed</option>
-                            </select>
+        <AppShell
+            title="Edit task"
+            subtitle="Update status, ownership, and priority without leaving the workflow."
+        >
+            {fetching ? <Loader label="Loading task" /> : (
+                <section className="form-panel">
+                    <form className="form-stack" onSubmit={handleSubmit}>
+                        <FormField label="Task title">
+                            <input className="text-input" name="title" value={formData.title} onChange={handleChange} />
+                        </FormField>
+
+                        <FormField label="Description">
+                            <textarea className="text-input textarea-input" name="description" value={formData.description} onChange={handleChange} />
+                        </FormField>
+
+                        <div className="form-row">
+                            <FormField label="Status">
+                                <select className="text-input" name="status" value={formData.status} onChange={handleChange}>
+                                    <option value="pending">Pending</option>
+                                    <option value="in-progress">In Progress</option>
+                                    <option value="completed">Completed</option>
+                                </select>
+                            </FormField>
+
+                            <FormField label="Priority">
+                                <select className="text-input" name="priority" value={formData.priority} onChange={handleChange}>
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                </select>
+                            </FormField>
                         </div>
-                        <div style={{ flex: 1 }}>
-                            <label className="form-label">Priority</label>
-                            <select
-                                className="form-input"
-                                value={formData.priority}
-                                onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                            >
-                                <option value="low">Low</option>
-                                <option value="medium">Medium</option>
-                                <option value="high">High</option>
-                            </select>
+
+                        <div className="form-row">
+                            <FormField label="Due date">
+                                <input className="text-input" name="dueDate" type="date" value={formData.dueDate} onChange={handleChange} />
+                            </FormField>
+
+                            <FormField label="Assign to">
+                                <select className="text-input" name="assignedTo" value={formData.assignedTo} onChange={handleChange}>
+                                    <option value="">Unassigned</option>
+                                    {users.map((user) => (
+                                        <option key={user._id} value={user._id}>{user.name}</option>
+                                    ))}
+                                </select>
+                            </FormField>
                         </div>
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label">Due Date</label>
-                        <input
-                            type="date"
-                            className="form-input"
-                            value={formData.dueDate}
-                            onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                        />
-                    </div>
-                    <button type="submit" className="btn btn-primary">Update Task</button>
-                </form>
-            </div>
-        </div>
+
+                        <button className="primary-button" type="submit" disabled={loading}>
+                            {loading ? 'Saving changes...' : 'Update task'}
+                        </button>
+                    </form>
+                </section>
+            )}
+        </AppShell>
     );
 };
 

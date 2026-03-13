@@ -1,33 +1,17 @@
 const express = require('express');
-const { check } = require('express-validator');
-const { register, login, getMe } = require('../controllers/authController');
-const { protect } = require('../middlewares/authMiddleware');
+const authController = require('../controllers/authController');
+const { authorize, protect } = require('../middlewares/authMiddleware');
+const validate = require('../middlewares/validationMiddleware');
+const asyncHandler = require('../utils/asyncHandler');
+const { USER_ROLES } = require('../utils/constants');
+const { loginValidation, registerValidation } = require('../utils/validators');
 
 const router = express.Router();
 
-// Validation middleware
-const validateRegister = [
-    check('name', 'Name is required').not().isEmpty(),
-    check('email', 'Please include a valid email').isEmail(),
-    check('password', 'Please enter a password with 6 or more characters').isLength({ min: 6 })
-];
-
-const validateLogin = [
-    check('email', 'Please include a valid email').isEmail(),
-    check('password', 'Password is required').exists()
-];
-
-const validationResultMiddleware = (req, res, next) => {
-    const { validationResult } = require('express-validator');
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-    }
-    next();
-};
-
-router.post('/register', validateRegister, validationResultMiddleware, register);
-router.post('/login', validateLogin, validationResultMiddleware, login);
-router.get('/me', protect, getMe);
+router.post('/register', registerValidation, validate, asyncHandler(authController.register));
+router.post('/login', loginValidation, validate, asyncHandler(authController.login));
+router.post('/logout', asyncHandler(authController.logout));
+router.get('/me', protect, authorize(USER_ROLES.ADMIN, USER_ROLES.USER), asyncHandler(authController.getMe));
+router.get('/users', protect, authorize(USER_ROLES.ADMIN, USER_ROLES.USER), asyncHandler(authController.getUsers));
 
 module.exports = router;

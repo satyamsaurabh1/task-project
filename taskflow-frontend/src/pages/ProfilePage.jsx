@@ -1,49 +1,51 @@
-import { useAuth } from '../context/AuthContext';
-import { User, Mail, Shield, Calendar } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ShieldCheck, UserRound, Mail, Fingerprint } from 'lucide-react';
+import AppShell from '../components/AppShell';
+import useAuth from '../hooks/useAuth';
 
 const ProfilePage = () => {
     const { user } = useAuth();
 
     return (
-        <div className="dashboard-layout">
-            <aside className="sidebar">
-                <Link to="/" style={{ color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem', textDecoration: 'none' }}>
-                    Dashboard
-                </Link>
-            </aside>
-            <main className="main-content">
-                <h1 style={{ marginBottom: '2rem' }}>My Profile</h1>
-                <div className="auth-card" style={{ maxWidth: '600px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '2rem' }}>
-                        <div style={{ background: 'var(--primary)', color: 'white', padding: '1rem', borderRadius: '50%' }}>
-                            <User size={40} />
-                        </div>
-                        <div>
-                            <h2 style={{ fontSize: '1.5rem' }}>{user?.name}</h2>
-                            <p style={{ color: 'var(--text-muted)' }}>{user?.role.toUpperCase()}</p>
-                        </div>
+        <AppShell
+            title="Profile"
+            subtitle="Your authenticated account details and workspace role."
+        >
+            <section className="profile-grid">
+                <article className="panel profile-hero-card">
+                    <div className="profile-avatar">
+                        <UserRound size={36} />
                     </div>
+                    <div>
+                        <h2>{user?.name}</h2>
+                        <p>{user?.email}</p>
+                    </div>
+                </article>
 
-                    <div style={{ display: 'grid', gap: '1rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '0.5rem' }}>
-                            <Mail size={20} color="var(--primary)" />
-                            <div>
-                                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Email</p>
-                                <p>{user?.email}</p>
-                            </div>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '0.5rem' }}>
-                            <Shield size={20} color="var(--primary)" />
-                            <div>
-                                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Account ID</p>
-                                <p style={{ fontSize: '0.875rem' }}>{user?._id}</p>
-                            </div>
+                <article className="panel detail-list">
+                    <div className="detail-row">
+                        <Mail size={18} />
+                        <div>
+                            <span>Email</span>
+                            <strong>{user?.email}</strong>
                         </div>
                     </div>
-                </div>
-            </main>
-        </div>
+                    <div className="detail-row">
+                        <ShieldCheck size={18} />
+                        <div>
+                            <span>Role</span>
+                            <strong>{user?.role}</strong>
+                        </div>
+                    </div>
+                    <div className="detail-row">
+                        <Fingerprint size={18} />
+                        <div>
+                            <span>User ID</span>
+                            <strong>{user?._id}</strong>
+                        </div>
+                    </div>
+                </article>
+            </section>
+        </AppShell>
     );
 };
 
