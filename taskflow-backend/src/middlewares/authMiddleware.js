@@ -11,15 +11,27 @@ const protect = asyncHandler(async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
+    
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await User.findById(decoded.id).select('-password');
 
-    if (!user) {
-        throw new ApiError(401, 'Authenticated user was not found');
+        if (!user) {
+            throw new ApiError(401, 'Authenticated user was not found');
+        }
+
+        req.user = user;
+        console.log(`[AUTH] User identified: ${user.email} (${user._id})`);
+        next();
+    } catch (error) {
+        if (error.name === 'TokenExpiredError') {
+            throw new ApiError(401, 'Token has expired');
+        }
+        if (error.name === 'JsonWebTokenError') {
+            throw new ApiError(401, 'Invalid token');
+        }
+        throw error;
     }
-
-    req.user = user;
-    next();
 });
 
 const authorize = (...roles) => (req, res, next) => {

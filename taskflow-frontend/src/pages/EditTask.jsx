@@ -21,6 +21,7 @@ const EditTask = () => {
         status: 'pending',
         priority: 'medium',
         dueDate: '',
+        deadline: '',
         assignedTo: ''
     });
 
@@ -39,6 +40,7 @@ const EditTask = () => {
                     status: task.status,
                     priority: task.priority,
                     dueDate: task.dueDate ? task.dueDate.split('T')[0] : '',
+                    deadline: task.deadline ? task.deadline.slice(0, 16) : '',
                     assignedTo: task.assignedTo?._id || ''
                 });
             } catch {
@@ -112,6 +114,12 @@ const EditTask = () => {
                                 <input className="text-input" name="dueDate" type="date" value={formData.dueDate} onChange={handleChange} />
                             </FormField>
 
+                            <FormField label="Deadline (with notifications)">
+                                <input className="text-input" name="deadline" type="datetime-local" value={formData.deadline} onChange={handleChange} />
+                            </FormField>
+                        </div>
+
+                        <div className="form-row">
                             <FormField label="Assign to">
                                 <select className="text-input" name="assignedTo" value={formData.assignedTo} onChange={handleChange}>
                                     <option value="">Unassigned</option>

@@ -6,8 +6,6 @@ const register = async (req, res) => {
 };
 
 const login = async (req, res) => {
-    // NOTE: Generating token is handled inside loginUser service
-    // We should probably check if the user account is locked here in the future
     const user = await authService.loginUser(req.body);
     console.log(`Auth: User ${user.email} logged in successfully`);
     res.json(user);
@@ -21,8 +19,16 @@ const logout = async (req, res) => {
 };
 
 const getMe = async (req, res) => {
-    const user = await authService.getCurrentUser(req.user._id);
-    res.json(user);
+    try {
+        const user = await authService.getCurrentUser(req.user._id);
+        if (!user) {
+            return res.status(401).json({ message: 'User not found' });
+        }
+        res.json(user);
+    } catch (error) {
+        console.error('[AUTH] getMe Error:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
 };
 
 const getUsers = async (req, res) => {

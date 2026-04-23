@@ -4,7 +4,7 @@ const { protect, authorize } = require('../middlewares/authMiddleware');
 const validate = require('../middlewares/validationMiddleware');
 const asyncHandler = require('../utils/asyncHandler');
 const { USER_ROLES } = require('../utils/constants');
-const { taskIdParamsValidation, taskValidation, updateTaskValidation } = require('../utils/validators');
+const { projectIdParamValidation, taskIdParamsValidation, taskValidation, updateTaskValidation } = require('../utils/validators');
 
 const router = express.Router({ mergeParams: true });
 

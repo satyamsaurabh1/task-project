@@ -1,7 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { NotificationProvider } from './context/NotificationContext';
 import CreateProject from './pages/CreateProject';
 import CreateTask from './pages/CreateTask';
 import Dashboard from './pages/Dashboard';
@@ -10,35 +14,48 @@ import Login from './pages/Login';
 import ProfilePage from './pages/ProfilePage';
 import ProjectDetails from './pages/ProjectDetails';
 import Register from './pages/Register';
+import CalendarPage from './pages/CalendarPage';
+import DirectMessages from './pages/DirectMessages';
 
 const App = () => (
-    <AuthProvider>
-        <Toaster
-            position="top-right"
-            toastOptions={{
-                style: {
-                    background: '#0f172a',
-                    color: '#f8fafc',
-                    border: '1px solid rgba(148, 163, 184, 0.2)'
-                }
-            }}
-        />
-        <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+    <ThemeProvider>
+        <AuthProvider>
+            <SocketProvider>
+                <NotificationProvider>
+                    <Toaster
+                        position="top-right"
+                        toastOptions={{
+                            style: {
+                                background: '#0f172a',
+                                color: '#f8fafc',
+                                border: '1px solid rgba(148, 163, 184, 0.2)'
+                            }
+                        }}
+                    />
+                    <ErrorBoundary>
+                        <Routes>
+                            <Route path="/login" element={<Login />} />
+                            <Route path="/register" element={<Register />} />
 
-            <Route element={<ProtectedRoute />}>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/create-project" element={<CreateProject />} />
-                <Route path="/projects/:id" element={<ProjectDetails />} />
-                <Route path="/projects/:id/create-task" element={<CreateTask />} />
-                <Route path="/projects/:id/tasks/:taskId/edit" element={<EditTask />} />
-            </Route>
+                            <Route element={<ProtectedRoute />}>
+                                <Route path="/" element={<Dashboard />} />
+                                <Route path="/profile" element={<ProfilePage />} />
+                                <Route path="/calendar" element={<CalendarPage />} />
+                                <Route path="/dm" element={<DirectMessages />} />
+                                <Route path="/dm/:userId" element={<DirectMessages />} />
+                                <Route path="/create-project" element={<CreateProject />} />
+                                <Route path="/projects/:id" element={<ProjectDetails />} />
+                                <Route path="/projects/:id/create-task" element={<CreateTask />} />
+                                <Route path="/projects/:id/tasks/:taskId/edit" element={<EditTask />} />
+                            </Route>
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-    </AuthProvider>
+                            <Route path="*" element={<Navigate to="/" replace />} />
+                        </Routes>
+                    </ErrorBoundary>
+                </NotificationProvider>
+            </SocketProvider>
+        </AuthProvider>
+    </ThemeProvider>
 );
 
 export default App;

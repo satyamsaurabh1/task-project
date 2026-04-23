@@ -14,6 +14,7 @@ const initialState = {
     status: 'pending',
     priority: 'medium',
     dueDate: '',
+    deadline: '',
     assignedTo: ''
 };
 
@@ -96,6 +97,12 @@ const CreateTask = () => {
                             <input className="text-input" name="dueDate" type="date" value={formData.dueDate} onChange={handleChange} />
                         </FormField>
 
+                        <FormField label="Deadline (with notifications)">
+                            <input className="text-input" name="deadline" type="datetime-local" value={formData.deadline} onChange={handleChange} />
+                        </FormField>
+                    </div>
+
+                    <div className="form-row">
                         <FormField label="Assign to">
                             <select className="text-input" name="assignedTo" value={formData.assignedTo} onChange={handleChange}>
                                 <option value="">Unassigned</option>

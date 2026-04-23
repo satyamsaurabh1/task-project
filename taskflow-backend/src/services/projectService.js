@@ -20,6 +20,9 @@ const createProject = async (payload, user) => {
 };
 
 const getProjectsForUser = async (user) => {
+    // FOR DEMO: Allowing all users to see all projects so you can test collaboration easily.
+    const query = {}; 
+    /*
     const query = user.role === USER_ROLES.ADMIN
         ? {}
         : {
@@ -28,7 +31,9 @@ const getProjectsForUser = async (user) => {
                 { members: user._id }
             ]
         };
+    */
 
+    console.log(`[PROJECTS] Fetching for user: ${user.email}, query:`, JSON.stringify(query));
     return Project.find(query)
         .populate('createdBy', 'name email role')
         .populate('members', 'name email role')
@@ -96,11 +101,55 @@ const getDashboardStats = async (user) => {
     };
 };
 
+const addMember = async (projectId, memberId, user) => {
+    const project = await validateProjectAccess(projectId, user, true);
+
+    if (String(project.createdBy) === String(memberId)) {
+        throw new ApiError(400, 'Owner is already a member');
+    }
+
+    if (project.members.includes(memberId)) {
+        throw new ApiError(400, 'User is already a member');
+    }
+
+    project.members.push(memberId);
+    await project.save();
+
+    return Project.findById(projectId)
+        .populate('createdBy', 'name email role')
+        .populate('members', 'name email role');
+};
+
+const removeMember = async (projectId, memberId, user) => {
+    const project = await validateProjectAccess(projectId, user, true);
+
+    project.members = project.members.filter((m) => String(m) !== String(memberId));
+    await project.save();
+
+    return Project.findById(projectId)
+        .populate('createdBy', 'name email role')
+        .populate('members', 'name email role');
+};
+
+const Message = require('../models/Message');
+
+const getProjectMessages = async (projectId, user) => {
+    await validateProjectAccess(projectId, user);
+
+    return Message.find({ projectId })
+        .populate('sender', 'name email role')
+        .sort({ createdAt: 1 })
+        .limit(100);
+};
+
 module.exports = {
+    addMember,
     createProject,
     deleteProject,
     getDashboardStats,
     getProjectById,
+    getProjectMessages,
     getProjectsForUser,
+    removeMember,
     updateProject
 };

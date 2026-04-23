@@ -20,9 +20,27 @@ const createProject = async (payload) => {
     return data;
 };
 
+const addMember = async (projectId, userId) => {
+    const { data } = await api.post(`/projects/${projectId}/members`, { userId });
+    return data;
+};
+
+const removeMember = async (projectId, userId) => {
+    const { data } = await api.delete(`/projects/${projectId}/members/${userId}`);
+    return data;
+};
+
+const getProjectMessages = async (projectId) => {
+    const { data } = await api.get(`/projects/${projectId}/messages`);
+    return data;
+};
+
 export {
+    addMember,
     createProject,
     getDashboardStats,
     getProjectById,
+    getProjectMessages,
     getProjects,
+    removeMember,
 };

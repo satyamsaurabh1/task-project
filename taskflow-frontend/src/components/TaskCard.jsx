@@ -1,64 +1,64 @@
 import { Link } from 'react-router-dom';
-import { CalendarDays, Pencil, Trash2, User2 } from 'lucide-react';
-import { formatDate, timeAgo } from '../utils/formatters';
+import { Trash2, Edit3, User, Paperclip } from 'lucide-react';
+import DeadlineCountdown from './DeadlineCountdown';
 
-const TaskCard = ({ projectId, task, onDelete, onStatusChange }) => {
-    const handleDragStart = (e) => {
-        e.dataTransfer.setData('taskId', task._id);
-        e.currentTarget.classList.add('dragging');
-    };
-
-    const handleDragEnd = (e) => {
-        e.currentTarget.classList.remove('dragging');
-    };
+const TaskCard = ({ task, projectId, onDelete, onStatusChange, dragHandlers = {} }) => {
+    const isOverdue = task.deadline && new Date(task.deadline) < new Date() && task.status !== 'completed';
 
     return (
-        <article
-            className="task-card"
+        <div
+            className={`task-card ${isOverdue ? 'task-card--overdue' : ''}`}
             draggable
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
+            {...dragHandlers}
+            id={`task-card-${task._id}`}
         >
             <div className="task-card-top">
-                <div>
-                    <h4>{task.title}</h4>
-                    <p>{task.description}</p>
-                </div>
+                <h4>{task.title}</h4>
                 <div className="task-card-actions">
-                    <Link to={`/projects/${projectId}/tasks/${task._id}/edit`} className="icon-button">
-                        <Pencil size={16} />
+                    <Link to={`/projects/${projectId}/tasks/${task._id}/edit`} className="icon-button" title="Edit">
+                        <Edit3 size={14} />
                     </Link>
-                    <button type="button" className="icon-button" onClick={() => onDelete(task._id)}>
-                        <Trash2 size={16} />
+                    <button className="icon-button" onClick={() => onDelete(task._id)} title="Delete">
+                        <Trash2 size={14} />
                     </button>
                 </div>
             </div>
 
+            <p>{task.description?.slice(0, 80)}{task.description?.length > 80 ? '…' : ''}</p>
+
             <div className="task-meta">
                 <span className={`badge badge-${task.priority}`}>{task.priority}</span>
-                <span className="task-inline">
-                    <CalendarDays size={14} />
-                    {formatDate(task.dueDate)}
-                </span>
-                <span className="task-inline">
-                    <User2 size={14} />
-                    {task.assignedTo?.name || 'Unassigned'}
-                </span>
-                <span className="task-created">
-                    {timeAgo(task.createdAt)}
-                </span>
+
+                {task.deadline && <DeadlineCountdown deadline={task.deadline} compact />}
+
+                {isOverdue && <span className="badge badge-overdue">OVERDUE</span>}
+
+                {task.assignedTo && (
+                    <span className="task-inline">
+                        <User size={12} />
+                        {task.assignedTo.name || 'Assigned'}
+                    </span>
+                )}
+
+                {task.attachments?.length > 0 && (
+                    <span className="task-inline">
+                        <Paperclip size={12} />
+                        {task.attachments.length}
+                    </span>
+                )}
             </div>
 
             <select
                 className="status-select"
                 value={task.status}
-                onChange={(event) => onStatusChange(task._id, event.target.value)}
+                onChange={(e) => onStatusChange(task._id, e.target.value)}
+                id={`status-select-${task._id}`}
             >
                 <option value="pending">Pending</option>
                 <option value="in-progress">In Progress</option>
                 <option value="completed">Completed</option>
             </select>
-        </article>
+        </div>
     );
 };
 

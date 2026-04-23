@@ -17,14 +17,8 @@ const registerValidation = [
         .withMessage('Email must be valid')
         .normalizeEmail(),
     body('password')
-        .isStrongPassword({
-            minLength: 8,
-            minLowercase: 1,
-            minUppercase: 1,
-            minNumbers: 1,
-            minSymbols: 1
-        })
-        .withMessage('Password must be at least 8 characters and include upper, lower, number, and symbol'),
+        .isLength({ min: 6 })
+        .withMessage('Password must be at least 6 characters long'),
     body('role')
         .optional()
         .isIn(Object.values(USER_ROLES))
@@ -62,7 +56,7 @@ const projectValidation = [
 ];
 
 const updateProjectValidation = [
-    param('id')
+    param('projectId')
         .isMongoId()
         .withMessage('Project id must be a valid Mongo ObjectId'),
     body('title')
@@ -151,7 +145,7 @@ const updateTaskValidation = [
 ];
 
 const projectIdParamValidation = [
-    param('id')
+    param('projectId')
         .isMongoId()
         .withMessage('Project id must be a valid Mongo ObjectId')
 ];
@@ -173,6 +167,5 @@ module.exports = {
     taskIdParamsValidation,
     taskValidation,
     updateProjectValidation,
-    updateTaskValidation,
-    mongoIdField
+    updateTaskValidation
 };
