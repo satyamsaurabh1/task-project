@@ -5,7 +5,6 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const compression = require('compression');
-const xss = require('xss-clean');
 const hpp = require('hpp');
 
 const authRoutes = require('./routes/authRoutes');
@@ -53,9 +52,6 @@ app.use('/api/', limiter);
 // Body Parser
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Data Sanitization against XSS
-app.use(xss());
 
 // Prevent HTTP Parameter Pollution
 app.use(hpp());
