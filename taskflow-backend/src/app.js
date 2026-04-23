@@ -63,6 +63,10 @@ app.use(compression());
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // 2. ROUTES
+app.get('/', (req, res) => {
+    res.send('TaskFlow API is running 🚀');
+});
+
 app.get('/api/health', (req, res) => {
     res.status(200).json({ 
         status: 'success',
