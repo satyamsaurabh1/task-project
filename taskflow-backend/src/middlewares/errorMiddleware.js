@@ -6,7 +6,15 @@ const notFound = (req, res, next) => {
 
 const errorHandler = (err, req, res, next) => {
     const statusCode = err.statusCode || 500;
+    
+    // Log error for developers
+    if (statusCode === 500 || process.env.NODE_ENV === 'development') {
+        console.error(`[ERROR] ${req.method} ${req.url}`);
+        console.error(err.stack);
+    }
+
     const response = {
+        status: 'error',
         message: err.message || 'Internal server error'
     };
 
@@ -14,7 +22,8 @@ const errorHandler = (err, req, res, next) => {
         response.details = err.details;
     }
 
-    if (process.env.NODE_ENV !== 'production' && statusCode === 500) {
+    // Include stack trace only in development
+    if (process.env.NODE_ENV === 'development' && statusCode === 500) {
         response.stack = err.stack;
     }
 
