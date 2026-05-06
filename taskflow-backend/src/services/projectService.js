@@ -1,10 +1,14 @@
 const Project = require('../models/Project');
 const Task = require('../models/Task');
 const ApiError = require('../utils/apiError');
-const { USER_ROLES } = require('../utils/constants');
-const { validateProjectAccess } = require('../utils/accessControl');
+const { PERMISSIONS, USER_ROLES } = require('../utils/constants');
+const { ensureProjectPermission, validateProjectAccess } = require('../utils/accessControl');
 
 const createProject = async (payload, user) => {
+    if (user.role === USER_ROLES.TEAM_MEMBER) {
+        throw new ApiError(403, 'Team members cannot create projects');
+    }
+
     const memberIds = [...new Set([...(payload.members || []), String(user._id)])];
 
     const project = await Project.create({
@@ -20,9 +24,6 @@ const createProject = async (payload, user) => {
 };
 
 const getProjectsForUser = async (user) => {
-    // FOR DEMO: Allowing all users to see all projects so you can test collaboration easily.
-    const query = {}; 
-    /*
     const query = user.role === USER_ROLES.ADMIN
         ? {}
         : {
@@ -31,7 +32,6 @@ const getProjectsForUser = async (user) => {
                 { members: user._id }
             ]
         };
-    */
 
     console.log(`[PROJECTS] Fetching for user: ${user.email}, query:`, JSON.stringify(query));
     return Project.find(query)
@@ -49,7 +49,7 @@ const getProjectById = async (projectId, user) => {
 };
 
 const updateProject = async (projectId, payload, user) => {
-    const project = await validateProjectAccess(projectId, user, true);
+    const project = await ensureProjectPermission(projectId, user, PERMISSIONS.PROJECTS_EDIT_ASSIGNED);
 
     const nextMembers = payload.members
         ? [...new Set(payload.members.filter((memberId) => memberId !== String(project.createdBy)))]
@@ -67,7 +67,7 @@ const updateProject = async (projectId, payload, user) => {
 };
 
 const deleteProject = async (projectId, user) => {
-    await validateProjectAccess(projectId, user, true);
+    await ensureProjectPermission(projectId, user, PERMISSIONS.PROJECTS_DELETE_ASSIGNED);
 
     await Task.deleteMany({ projectId });
     const project = await Project.findById(projectId);
@@ -102,7 +102,7 @@ const getDashboardStats = async (user) => {
 };
 
 const addMember = async (projectId, memberId, user) => {
-    const project = await validateProjectAccess(projectId, user, true);
+    const project = await ensureProjectPermission(projectId, user, PERMISSIONS.PROJECT_MEMBERS_MANAGE_ASSIGNED);
 
     if (String(project.createdBy) === String(memberId)) {
         throw new ApiError(400, 'Owner is already a member');
@@ -121,7 +121,7 @@ const addMember = async (projectId, memberId, user) => {
 };
 
 const removeMember = async (projectId, memberId, user) => {
-    const project = await validateProjectAccess(projectId, user, true);
+    const project = await ensureProjectPermission(projectId, user, PERMISSIONS.PROJECT_MEMBERS_MANAGE_ASSIGNED);
 
     project.members = project.members.filter((m) => String(m) !== String(memberId));
     await project.save();

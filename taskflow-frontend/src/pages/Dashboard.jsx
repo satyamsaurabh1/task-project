@@ -12,10 +12,10 @@ import Loader from '../components/Loader';
 import GamificationBadge from '../components/GamificationBadge';
 import * as projectService from '../services/projectService';
 import * as taskService from '../services/taskService';
-import { useSocket } from '../context/SocketContext';
+import useSocket from '../hooks/useSocket';
 import useAuth from '../hooks/useAuth';
 import { generateSuggestions } from '../utils/aiSuggestions';
-import { useNotifications } from '../context/NotificationContext';
+import useNotifications from '../hooks/useNotifications';
 
 const CHART_COLORS = ['#10b981', '#f59e0b', '#ef4444', '#06b6d4'];
 const EMPTY_STATS = {
@@ -39,6 +39,7 @@ const Dashboard = () => {
     const { user } = useAuth();
     const { notifications, markRead } = useNotifications();
     const dashboardStats = stats || EMPTY_STATS;
+    const canCreateProject = Boolean(user?.permissions?.includes('projects:create'));
 
     useEffect(() => {
         const loadDashboard = async () => {
@@ -149,10 +150,12 @@ const Dashboard = () => {
                         onChange={(event) => setSearch(event.target.value)}
                         placeholder="Search projects"
                     />
-                    <Link to="/create-project" className="primary-button button-link">
-                        <FolderPlus size={18} />
-                        New project
-                    </Link>
+                    {canCreateProject && (
+                        <Link to="/create-project" className="primary-button button-link">
+                            <FolderPlus size={18} />
+                            New project
+                        </Link>
+                    )}
                 </>
             )}
         >
@@ -316,7 +319,7 @@ const Dashboard = () => {
                             <EmptyState
                                 title="No matching projects"
                                 description="Create a workspace or adjust the current search filter."
-                                action={<Link to="/create-project" className="primary-button button-link">Create project</Link>}
+                                action={canCreateProject ? <Link to="/create-project" className="primary-button button-link">Create project</Link> : null}
                             />
                         )}
                     </section>

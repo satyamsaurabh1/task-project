@@ -160,6 +160,18 @@ The server will start on `http://localhost:5000` (or whichever PORT you set).
 
 ---
 
+## Default Credentials
+
+The system automatically bootstraps a root admin account if the relevant environment variables are set.
+
+| Role | Email | Password |
+|---|---|---|
+| **Root Admin** | `owner34@gmail.com` | `Admin@12345` |
+
+> **Note**: These credentials are managed via `ROOT_ADMIN_EMAIL` and `ROOT_ADMIN_PASSWORD` in the `.env` file. On startup, the server will create or sync this user with the **admin** role.
+
+---
+
 ## Environment Variables
 
 Create a `.env` file in the `taskflow-backend/` root:

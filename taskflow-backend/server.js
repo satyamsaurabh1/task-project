@@ -5,6 +5,7 @@ const connectDB = require('./src/config/db');
 const { initSocket } = require('./src/config/socket');
 const { registerSocketHandlers } = require('./src/sockets/socketHandler');
 const { startDeadlineChecker } = require('./src/jobs/deadlineChecker');
+const bootstrapRootAdmin = require('./src/utils/bootstrapRootAdmin');
 
 // 1. UNCAUGHT EXCEPTION HANDLER
 process.on('uncaughtException', (err) => {
@@ -18,7 +19,8 @@ let httpServer;
 
 // 2. CONNECT DATABASE & START SERVER
 connectDB()
-    .then(() => {
+    .then(async () => {
+        await bootstrapRootAdmin();
         httpServer = http.createServer(app);
         
         // Initialize WebSockets

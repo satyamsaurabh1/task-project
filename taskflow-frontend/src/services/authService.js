@@ -20,9 +20,15 @@ const getUsers = async () => {
     return data;
 };
 
+const updateUserRole = async (userId, role) => {
+    const { data } = await api.patch(`/auth/users/${userId}/role`, { role });
+    return data;
+};
+
 export {
     getProfile,
     getUsers,
     login,
     register,
+    updateUserRole,
 };

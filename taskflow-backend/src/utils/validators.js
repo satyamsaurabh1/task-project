@@ -22,7 +22,7 @@ const registerValidation = [
     body('role')
         .optional()
         .isIn(Object.values(USER_ROLES))
-        .withMessage('Role must be admin or user')
+        .withMessage(`Role must be one of: ${Object.values(USER_ROLES).join(', ')}`)
 ];
 
 const loginValidation = [
@@ -150,6 +150,29 @@ const projectIdParamValidation = [
         .withMessage('Project id must be a valid Mongo ObjectId')
 ];
 
+const memberAssignmentValidation = [
+    body('userId')
+        .notEmpty()
+        .withMessage('userId is required')
+        .isMongoId()
+        .withMessage('userId must be a valid Mongo ObjectId')
+];
+
+const userIdParamValidation = [
+    param('userId')
+        .isMongoId()
+        .withMessage('User id must be a valid Mongo ObjectId')
+];
+
+const updateUserRoleValidation = [
+    ...userIdParamValidation,
+    body('role')
+        .notEmpty()
+        .withMessage('Role is required')
+        .isIn(Object.values(USER_ROLES))
+        .withMessage(`Role must be one of: ${Object.values(USER_ROLES).join(', ')}`)
+];
+
 const taskIdParamsValidation = [
     param('projectId')
         .isMongoId()
@@ -161,11 +184,14 @@ const taskIdParamsValidation = [
 
 module.exports = {
     loginValidation,
+    memberAssignmentValidation,
     projectIdParamValidation,
     projectValidation,
     registerValidation,
     taskIdParamsValidation,
     taskValidation,
+    updateUserRoleValidation,
     updateProjectValidation,
-    updateTaskValidation
+    updateTaskValidation,
+    userIdParamValidation
 };

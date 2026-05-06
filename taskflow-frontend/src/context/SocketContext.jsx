@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useEffect, useState } from 'react';
 import * as socketService from '../services/socketService';
 import useAuth from '../hooks/useAuth';
 
@@ -12,13 +12,14 @@ export const SocketProvider = ({ children }) => {
     useEffect(() => {
         if (!user?.token) {
             socketService.disconnect();
-            setSocket(null);
-            setIsConnected(false);
-            return;
+            return undefined;
         }
 
         const s = socketService.connect(user.token);
-        setSocket(s);
+        queueMicrotask(() => {
+            setSocket(s);
+            setIsConnected(s.connected);
+        });
 
         const onConnect = () => setIsConnected(true);
         const onDisconnect = () => setIsConnected(false);
@@ -26,15 +27,14 @@ export const SocketProvider = ({ children }) => {
         s.on('connect', onConnect);
         s.on('disconnect', onDisconnect);
 
-        // Sync initial state
-        if (s.connected) setIsConnected(true);
-
         return () => {
             s.off('connect', onConnect);
             s.off('disconnect', onDisconnect);
             socketService.disconnect();
-            setSocket(null);
-            setIsConnected(false);
+            queueMicrotask(() => {
+                setSocket(null);
+                setIsConnected(false);
+            });
         };
     }, [user?.token]);
 
@@ -45,4 +45,4 @@ export const SocketProvider = ({ children }) => {
     );
 };
 
-export const useSocket = () => useContext(SocketContext);
+export { SocketContext };

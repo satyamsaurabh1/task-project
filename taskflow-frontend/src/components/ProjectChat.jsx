@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { MessageCircle, X, Send, Users } from 'lucide-react';
-import { useSocket } from '../context/SocketContext';
+import useSocket from '../hooks/useSocket';
 import { getProjectMessages } from '../services/projectService';
 
 const TYPING_TIMEOUT = 2000;
@@ -88,7 +88,6 @@ const ProjectChat = ({ projectId, projectTitle, currentUser }) => {
     // ── Auto-scroll ───────────────────────────────────────────────
     useEffect(() => {
         if (open) {
-            setUnread(0);
             bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
         }
     }, [messages, open]);
@@ -142,13 +141,22 @@ const ProjectChat = ({ projectId, projectTitle, currentUser }) => {
     };
 
     const typingNames = Object.values(typingUsers);
+    const toggleOpen = () => {
+        setOpen((current) => {
+            const next = !current;
+            if (next) {
+                setUnread(0);
+            }
+            return next;
+        });
+    };
 
     return (
         <>
             {/* Floating toggle button */}
             <button
                 className="chat-fab"
-                onClick={() => setOpen((o) => !o)}
+                onClick={toggleOpen}
                 aria-label="Toggle chat"
                 id="chat-fab-btn"
             >

@@ -40,14 +40,16 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Rate Limiting
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per window
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: 'Too many requests from this IP, please try again after 15 minutes'
-});
-app.use('/api/', limiter);
+if (process.env.NODE_ENV === 'production') {
+    const limiter = rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 100, // Limit each IP to 100 requests per window
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: 'Too many requests from this IP, please try again after 15 minutes'
+    });
+    app.use('/api/', limiter);
+}
 
 // Body Parser
 app.use(express.json({ limit: '10mb' }));

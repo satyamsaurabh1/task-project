@@ -9,7 +9,7 @@ import ChatSection from '../components/ChatSection';
 import TeamSection from '../components/TeamSection';
 import * as projectService from '../services/projectService';
 import * as taskService from '../services/taskService';
-import { useSocket } from '../context/SocketContext';
+import useSocket from '../hooks/useSocket';
 import useAuth from '../hooks/useAuth';
 
 const ProjectDetails = () => {

@@ -6,10 +6,22 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useAuth from '../hooks/useAuth';
-import { useTheme } from '../context/ThemeContext';
-import { useNotifications } from '../context/NotificationContext';
-import { useSocket } from '../context/SocketContext';
+import useTheme from '../hooks/useTheme';
+import useNotifications from '../hooks/useNotifications';
+import useSocket from '../hooks/useSocket';
 import NotificationPanel from './NotificationPanel';
+
+const formatRoleLabel = (role) => {
+    if (!role) {
+        return 'Unknown';
+    }
+
+    if (role === 'admin') {
+        return 'Root Admin';
+    }
+
+    return role.replace(/_/g, ' ');
+};
 
 const AppShell = ({ title, subtitle, actions, children }) => {
     const { user, logout } = useAuth();
@@ -105,7 +117,7 @@ const AppShell = ({ title, subtitle, actions, children }) => {
                         </div>
                         <div>
                             <strong>{user?.name}</strong>
-                            <span>{user?.role}</span>
+                            <span>{formatRoleLabel(user?.role)}</span>
                         </div>
                     </div>
                     <div className="sidebar-actions-row">

@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const ApiError = require('../utils/apiError');
 const asyncHandler = require('../utils/asyncHandler');
+const { ROLE_PERMISSIONS, normalizeUserRole } = require('../utils/constants');
 
 const protect = asyncHandler(async (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -20,6 +21,7 @@ const protect = asyncHandler(async (req, res, next) => {
             throw new ApiError(401, 'Authenticated user was not found');
         }
 
+        user.role = normalizeUserRole(user.role);
         req.user = user;
         console.log(`[AUTH] User identified: ${user.email} (${user._id})`);
         next();
@@ -42,7 +44,23 @@ const authorize = (...roles) => (req, res, next) => {
     return next();
 };
 
+const requirePermission = (...permissions) => (req, res, next) => {
+    if (!req.user) {
+        return next(new ApiError(401, 'Authentication is required'));
+    }
+
+    const rolePermissions = ROLE_PERMISSIONS[normalizeUserRole(req.user.role)] || [];
+    const hasPermission = permissions.some((permission) => rolePermissions.includes(permission));
+
+    if (!hasPermission) {
+        return next(new ApiError(403, 'You do not have permission to perform this action'));
+    }
+
+    return next();
+};
+
 module.exports = {
     protect,
-    authorize
+    authorize,
+    requirePermission
 };

@@ -1,9 +1,6 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useEffect, useState, useCallback } from 'react';
 import api from '../services/api';
 import useAuth from '../hooks/useAuth';
-import toast from 'react-hot-toast';
-
-const SocketContext2 = null; // We'll import socket dynamically
 
 const NotificationContext = createContext(null);
 
@@ -23,10 +20,32 @@ export const NotificationProvider = ({ children }) => {
     }, [user?.token]);
 
     useEffect(() => {
-        if (user?.token) {
-            fetchNotifications();
+        if (!user?.token) {
+            return undefined;
         }
-    }, [user?.token, fetchNotifications]);
+
+        let isCancelled = false;
+
+        const loadNotifications = async () => {
+            try {
+                const { data } = await api.get('/notifications');
+                if (isCancelled) {
+                    return;
+                }
+
+                setNotifications(data.notifications || []);
+                setUnreadCount(data.unreadCount || 0);
+            } catch {
+                // Silent on bootstrapping notifications.
+            }
+        };
+
+        loadNotifications();
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [user?.token]);
 
     const markRead = async (id) => {
         try {
@@ -54,10 +73,4 @@ export const NotificationProvider = ({ children }) => {
     );
 };
 
-export const useNotifications = () => {
-    const ctx = useContext(NotificationContext);
-    if (!ctx) throw new Error('useNotifications must be used within NotificationProvider');
-    return ctx;
-};
-
-export default NotificationContext;
+export { NotificationContext };

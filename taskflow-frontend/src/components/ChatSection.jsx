@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Send, Smile } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useSocket } from '../context/SocketContext';
+import useSocket from '../hooks/useSocket';
 import { timeAgo } from '../utils/formatters';
 import * as projectService from '../services/projectService';
 
@@ -10,7 +10,6 @@ const ChatSection = ({ projectId, projectTitle, currentUser }) => {
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
     const [typingUser, setTypingUser] = useState(null);
-    const [loadingHistory, setLoadingHistory] = useState(true);
     const scrollRef = useRef(null);
     const typingTimeoutRef = useRef(null);
 
@@ -25,7 +24,7 @@ const ChatSection = ({ projectId, projectTitle, currentUser }) => {
                 console.error('Failed to load chat history:', error);
                 toast.error('Could not load message history');
             } finally {
-                setLoadingHistory(false);
+                // Intentionally no loading UI for chat history yet.
             }
         };
         loadHistory();

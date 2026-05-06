@@ -6,7 +6,7 @@ import AppShell from '../components/AppShell';
 import Loader from '../components/Loader';
 import EmojiPicker from '../components/EmojiPicker';
 import VoiceRecorder from '../components/VoiceRecorder';
-import { useSocket } from '../context/SocketContext';
+import useSocket from '../hooks/useSocket';
 import useAuth from '../hooks/useAuth';
 import api from '../services/api';
 
@@ -15,24 +15,20 @@ const DirectMessages = () => {
     const { user } = useAuth();
     const { socket } = useSocket();
     const [users, setUsers] = useState([]);
-    const [threads, setThreads] = useState([]);
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(true);
     const [onlineUsers, setOnlineUsers] = useState(new Set());
     const [readReceipts, setReadReceipts] = useState(new Set());
+    const [unreadCounts, setUnreadCounts] = useState({});
     const bottomRef = useRef(null);
 
     // Fetch users and threads
     useEffect(() => {
         const load = async () => {
             try {
-                const [{ data: userList }, { data: threadList }] = await Promise.all([
-                    api.get('/auth/users'),
-                    api.get('/dm')
-                ]);
+                const { data: userList } = await api.get('/auth/users');
                 setUsers(userList.filter(u => u._id !== user?._id));
-                setThreads(threadList);
             } catch { /* silent */ }
             finally { setLoading(false); }
         };
@@ -46,6 +42,7 @@ const DirectMessages = () => {
             try {
                 const { data } = await api.get(`/dm/${activeUserId}`);
                 setMessages(data.messages || []);
+                setUnreadCounts(prev => ({ ...prev, [activeUserId]: 0 }));
             } catch { setMessages([]); }
         };
         load();
@@ -60,9 +57,16 @@ const DirectMessages = () => {
         const onOffline = ({ userId }) => setOnlineUsers(prev => { const n = new Set(prev); n.delete(userId); return n; });
         const onDm = ({ fromUserId, message }) => {
             if (String(fromUserId) === String(activeUserId)) {
-                setMessages(prev => [...prev, message]);
-                // Mark message as read
+                setMessages(prev => {
+                    if (prev.some(m => String(m._id) === String(message._id))) return prev;
+                    return [...prev, message];
+                });
                 socket.emit('dm:read', { messageId: message._id, userId: activeUserId });
+            } else {
+                setUnreadCounts(prev => ({
+                    ...prev,
+                    [fromUserId]: (prev[fromUserId] || 0) + 1
+                }));
             }
         };
         const onReadReceipt = ({ messageId, userId }) => {
@@ -103,12 +107,6 @@ const DirectMessages = () => {
             });
         }
     }, [activeUserId, messages, socket, user, readReceipts]);
-
-    const markAsRead = (messageId) => {
-        if (socket && activeUserId) {
-            socket.emit('dm:read', { messageId, userId: activeUserId });
-        }
-    };
 
     const sendMessage = async (e) => {
         e.preventDefault();
@@ -244,6 +242,9 @@ const DirectMessages = () => {
                                         <strong>{getDisplayName(u)}</strong>
                                         <span>{u.email}</span>
                                     </div>
+                                    {unreadCounts[u._id] > 0 && (
+                                        <div className="unread-badge">{unreadCounts[u._id]}</div>
+                                    )}
                                 </Link>
                             ))}
                         </div>

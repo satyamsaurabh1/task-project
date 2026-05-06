@@ -37,10 +37,16 @@ const getUsers = async (req, res) => {
     res.json(users);
 };
 
+const updateUserRole = async (req, res) => {
+    const user = await authService.updateUserRole(req.params.userId, req.body.role);
+    res.json(user);
+};
+
 module.exports = {
     getMe,
     getUsers,
     login,
     logout,
-    register
+    register,
+    updateUserRole
 };

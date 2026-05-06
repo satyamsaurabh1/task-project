@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Bell, X, Check, CheckCheck, Clock, AlertTriangle, MessageSquare, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useNotifications } from '../context/NotificationContext';
+import useNotifications from '../hooks/useNotifications';
 
 const iconMap = {
     deadline_overdue: <AlertTriangle size={16} style={{ color: '#ef4444' }} />,

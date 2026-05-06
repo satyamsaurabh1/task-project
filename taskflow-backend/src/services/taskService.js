@@ -1,9 +1,10 @@
 const Task = require('../models/Task');
 const ApiError = require('../utils/apiError');
-const { validateProjectAccess } = require('../utils/accessControl');
+const { PERMISSIONS } = require('../utils/constants');
+const { ensureProjectPermission, ensureTaskPermission, validateProjectAccess } = require('../utils/accessControl');
 
 const createTask = async (projectId, payload, user) => {
-    await validateProjectAccess(projectId, user);
+    await ensureProjectPermission(projectId, user, PERMISSIONS.TASKS_CREATE_ASSIGNED);
 
     const task = await Task.create({
         title: payload.title,
@@ -49,13 +50,7 @@ const getTaskById = async (projectId, taskId, user) => {
 };
 
 const updateTask = async (projectId, taskId, payload, user) => {
-    await validateProjectAccess(projectId, user);
-
-    const task = await Task.findOne({ _id: taskId, projectId });
-
-    if (!task) {
-        throw new ApiError(404, 'Task not found');
-    }
+    const { task } = await ensureTaskPermission(projectId, taskId, user, PERMISSIONS.TASKS_EDIT_ASSIGNED);
 
     // Track changes for activity log
     const changes = [];
@@ -97,13 +92,7 @@ const updateTask = async (projectId, taskId, payload, user) => {
 };
 
 const deleteTask = async (projectId, taskId, user) => {
-    await validateProjectAccess(projectId, user);
-
-    const task = await Task.findOne({ _id: taskId, projectId });
-
-    if (!task) {
-        throw new ApiError(404, 'Task not found');
-    }
+    const { task } = await ensureTaskPermission(projectId, taskId, user, PERMISSIONS.TASKS_DELETE_ASSIGNED);
 
     await task.deleteOne();
 };
