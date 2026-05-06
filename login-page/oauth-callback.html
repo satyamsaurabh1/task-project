@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TaskFlow — OAuth Callback</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{
+      font-family:'Poppins',sans-serif;
+      background:#0a0a1a;
+      color:#f0f0ff;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .card{
+      text-align:center;
+      padding:48px 36px;
+      background:rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:24px;
+      backdrop-filter:blur(20px);
+      max-width:420px;
+      width:90%;
+      box-shadow:0 32px 80px rgba(0,0,0,0.55);
+    }
+    .spinner{
+      width:56px;height:56px;
+      border:4px solid rgba(124,58,237,0.25);
+      border-top-color:#7c3aed;
+      border-radius:50%;
+      animation:spin 0.8s linear infinite;
+      margin:0 auto 24px;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+    h2{font-size:1.4rem;font-weight:600;margin-bottom:8px}
+    p{color:rgba(240,240,255,0.55);font-size:0.9rem;line-height:1.6}
+    .status{margin-top:20px;font-size:0.85rem;color:#a78bfa;font-weight:500}
+    .error-box{
+      margin-top:20px;
+      background:rgba(248,113,113,0.1);
+      border:1px solid rgba(248,113,113,0.3);
+      border-radius:12px;
+      padding:14px;
+      font-size:0.82rem;
+      color:#fca5a5;
+      display:none;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner" id="spinner"></div>
+    <h2 id="title">Completing Sign-In…</h2>
+    <p id="desc">Please wait while we verify your identity.</p>
+    <div class="status" id="status"></div>
+    <div class="error-box" id="errorBox"></div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const params   = new URLSearchParams(window.location.search);
+    const code     = params.get('code');
+    const error    = params.get('error');
+    const provider = sessionStorage.getItem('oauth_provider') || 'github';
+
+    const spinner  = document.getElementById('spinner');
+    const title    = document.getElementById('title');
+    const desc     = document.getElementById('desc');
+    const status   = document.getElementById('status');
+    const errorBox = document.getElementById('errorBox');
+
+    if (error) {
+      showError(
+        'Access Denied',
+        'You cancelled the sign-in or an error occurred.',
+        decodeURIComponent(error)
+      );
+    } else if (!code) {
+      showError('Missing Code', 'No authorization code was returned.', 'code parameter not found in URL');
+    } else {
+      handleCallback(code, provider);
+    }
+
+    async function handleCallback(code, provider) {
+      status.textContent = `Got authorization code from ${provider}. Verifying…`;
+
+      /* ── NOTE ──────────────────────────────────────────────────
+         In a real app, you would POST this `code` to your backend,
+         which would exchange it for an access token using the
+         client secret (never expose the secret in frontend code).
+
+         Example backend endpoint: POST /api/auth/oauth/github
+         Body: { code, redirectUri }
+
+         For this demo, we simulate a successful exchange.
+         Replace the block below with a real fetch() call.
+      ─────────────────────────────────────────────────────────── */
+
+      try {
+        /* ── DEMO SIMULATION ── Remove this block in production ── */
+        await new Promise(r => setTimeout(r, 1500));
+        const fakeUser = {
+          name:   provider === 'github' ? 'GitHub User' : 'Google User',
+          email:  'user@example.com',
+          avatar: `https://ui-avatars.com/api/?name=${provider}&background=7c3aed&color=fff`,
+          provider,
+        };
+        /* ── END DEMO BLOCK ─────────────────────────────────── */
+
+        /* ── REAL IMPLEMENTATION (uncomment & adapt) ──────────
+        const res  = await fetch('/api/auth/oauth/' + provider, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ code, redirectUri: OAUTH_CONFIG[provider].redirectUri }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const { user, token } = await res.json();
+        localStorage.setItem('taskflow_token', token);
+        ──────────────────────────────────────────────────────── */
+
+        sessionStorage.setItem('oauth_user', JSON.stringify(fakeUser));
+        sessionStorage.removeItem('oauth_provider');
+
+        showSuccess(fakeUser);
+
+        /* Redirect back to main page after 2s */
+        setTimeout(() => {
+          window.location.href = 'index.html?loggedIn=1&provider=' + provider;
+        }, 2000);
+
+      } catch (err) {
+        showError('Authentication Failed', 'Could not complete sign-in. Please try again.', err.message);
+      }
+    }
+
+    function showSuccess(user) {
+      spinner.style.borderTopColor = '#34d399';
+      title.textContent   = `Welcome, ${user.name}! 🎉`;
+      desc.textContent    = `Signed in via ${user.provider}. Redirecting to your workspace…`;
+      status.textContent  = '✓ Identity verified successfully';
+      status.style.color  = '#34d399';
+    }
+
+    function showError(t, d, detail) {
+      spinner.style.display = 'none';
+      title.textContent   = t;
+      desc.textContent    = d;
+      errorBox.textContent = detail;
+      errorBox.style.display = 'block';
+      status.textContent = '';
+    }
+  </script>
+</body>
+</html>
