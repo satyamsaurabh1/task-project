@@ -1,0 +1,13 @@
+.gcloudignore
+.git
+.gitignore
+node_modules/
+**/node_modules/
+taskflow-frontend/dist/
+taskflow-backend/uploads/
+*.log
+.env
+.vscode/
+login-page/
+fix.js
+TaskFlow.postman_collection.json

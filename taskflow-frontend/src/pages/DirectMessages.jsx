@@ -1,19 +1,21 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Send, Circle, Check, CheckCheck } from 'lucide-react';
+import { Send, Circle, Check, CheckCheck, Phone, Video, MoreVertical, Search, Smile, Paperclip } from 'lucide-react';
 import AppShell from '../components/AppShell';
 import Loader from '../components/Loader';
 import EmojiPicker from '../components/EmojiPicker';
 import VoiceRecorder from '../components/VoiceRecorder';
-import useSocket from '../hooks/useSocket';
+import { useSocket } from '../context/SocketContext';
 import useAuth from '../hooks/useAuth';
 import api from '../services/api';
+import './DirectMessages.css';
 
 const DirectMessages = () => {
     const { userId: activeUserId } = useParams();
     const { user } = useAuth();
-    const { socket } = useSocket();
+    const { socket, isConnected } = useSocket();
+    
     const [users, setUsers] = useState([]);
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -21,21 +23,33 @@ const DirectMessages = () => {
     const [onlineUsers, setOnlineUsers] = useState(new Set());
     const [readReceipts, setReadReceipts] = useState(new Set());
     const [unreadCounts, setUnreadCounts] = useState({});
+    const [isTyping, setIsTyping] = useState(false);
+    const [typingUser, setTypingUser] = useState(null);
+    
     const bottomRef = useRef(null);
+    const typingTimeoutRef = useRef(null);
 
-    // Fetch users and threads
+    // Initial load
     useEffect(() => {
         const load = async () => {
             try {
                 const { data: userList } = await api.get('/auth/users');
                 setUsers(userList.filter(u => u._id !== user?._id));
-            } catch { /* silent */ }
+                
+                const { data: threads } = await api.get('/dm');
+                const counts = {};
+                threads.forEach(t => {
+                    const other = t.participants.find(p => p._id !== user?._id);
+                    if (other) counts[other._id] = t.unreadCount || 0;
+                });
+                setUnreadCounts(counts);
+            } catch (err) { console.error(err); }
             finally { setLoading(false); }
         };
         load();
     }, [user]);
 
-    // Fetch conversation when active user changes
+    // Fetch conversation
     useEffect(() => {
         if (!activeUserId) { setMessages([]); return; }
         const load = async () => {
@@ -43,25 +57,62 @@ const DirectMessages = () => {
                 const { data } = await api.get(`/dm/${activeUserId}`);
                 setMessages(data.messages || []);
                 setUnreadCounts(prev => ({ ...prev, [activeUserId]: 0 }));
+                
+                const readSet = new Set();
+                data.messages.forEach(m => {
+                    if (m.readBy?.length > 1) readSet.add(m._id);
+                });
+                setReadReceipts(readSet);
             } catch { setMessages([]); }
         };
         load();
-    }, [activeUserId]);
+    }, [activeUserId, user?._id]);
 
-    // Online tracking
+    // Socket Handlers
     useEffect(() => {
         if (!socket) return;
-        socket.emit('users:online');
-        const onList = (list) => setOnlineUsers(new Set(list));
-        const onOnline = ({ userId }) => setOnlineUsers(prev => new Set([...prev, userId]));
-        const onOffline = ({ userId }) => setOnlineUsers(prev => { const n = new Set(prev); n.delete(userId); return n; });
-        const onDm = ({ fromUserId, message }) => {
-            if (String(fromUserId) === String(activeUserId)) {
+        
+        const onOnlineList = (list) => {
+            setOnlineUsers(new Set(list.map(String)));
+        };
+
+        const onUserOnline = ({ userId: id }) => {
+            setOnlineUsers(prev => {
+                const next = new Set(prev);
+                next.add(String(id));
+                return next;
+            });
+        };
+
+        const onUserOffline = ({ userId: id }) => {
+            setOnlineUsers(prev => {
+                const next = new Set(prev);
+                next.delete(String(id));
+                return next;
+            });
+        };
+        
+        const onDmReceived = ({ fromUserId, message, tempId }) => {
+            const isRelevant = String(fromUserId) === String(activeUserId) || 
+                               String(message.sender?._id || message.sender) === String(user?._id);
+            
+            if (isRelevant) {
                 setMessages(prev => {
-                    if (prev.some(m => String(m._id) === String(message._id))) return prev;
+                    const existingIdx = prev.findIndex(m => 
+                        (m._id === message._id) || (tempId && m.tempId === tempId)
+                    );
+                    
+                    if (existingIdx > -1) {
+                        const next = [...prev];
+                        next[existingIdx] = message;
+                        return next;
+                    }
                     return [...prev, message];
                 });
-                socket.emit('dm:read', { messageId: message._id, userId: activeUserId });
+
+                if (String(fromUserId) === String(activeUserId)) {
+                    socket.emit('dm:read', { messageId: message._id, userId: activeUserId });
+                }
             } else {
                 setUnreadCounts(prev => ({
                     ...prev,
@@ -69,260 +120,234 @@ const DirectMessages = () => {
                 }));
             }
         };
-        const onReadReceipt = ({ messageId, userId }) => {
-            if (String(userId) === String(user?._id)) {
+
+        const onReadReceipt = ({ messageId, userId: readerId }) => {
+            if (String(readerId) === String(activeUserId)) {
                 setReadReceipts(prev => new Set([...prev, messageId]));
             }
         };
 
-        socket.on('users:online:list', onList);
-        socket.on('user:online', onOnline);
-        socket.on('user:offline', onOffline);
-        socket.on('dm:received', onDm);
+        const onTypingStatus = ({ userId: tId, typing, type }) => {
+            if (type === 'dm' && String(tId) === String(activeUserId)) {
+                setTypingUser(typing ? tId : null);
+            }
+        };
+
+        socket.on('users:online:list', onOnlineList);
+        socket.on('user:online', onUserOnline);
+        socket.on('user:offline', onUserOffline);
+        socket.on('dm:received', onDmReceived);
         socket.on('dm:read:receipt', onReadReceipt);
+        socket.on('typing:status', onTypingStatus);
+
+        // Sync presence on mount or reconnection
+        socket.emit('users:online:request');
 
         return () => {
-            socket.off('users:online:list', onList);
-            socket.off('user:online', onOnline);
-            socket.off('user:offline', onOffline);
-            socket.off('dm:received', onDm);
+            socket.off('users:online:list', onOnlineList);
+            socket.off('user:online', onUserOnline);
+            socket.off('user:offline', onUserOffline);
+            socket.off('dm:received', onDmReceived);
             socket.off('dm:read:receipt', onReadReceipt);
+            socket.off('typing:status', onTypingStatus);
         };
-    }, [socket, activeUserId, user]);
+    }, [socket, activeUserId, user?._id]);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+    }, [messages, typingUser]);
 
-    // Mark messages as read when conversation is opened
-    useEffect(() => {
-        if (activeUserId && messages.length > 0 && socket) {
-            const unreadMessages = messages.filter(msg => 
-                String(msg.sender?._id || msg.sender) !== String(user?._id) &&
-                !readReceipts.has(msg._id)
-            );
-            
-            unreadMessages.forEach(msg => {
-                socket.emit('dm:read', { messageId: msg._id, userId: activeUserId });
-            });
+    // Handle Typing
+    const handleInputChange = (e) => {
+        setInput(e.target.value);
+        if (!socket || !activeUserId) return;
+
+        if (!isTyping) {
+            setIsTyping(true);
+            socket.emit('typing:start', { roomId: `user:${activeUserId}`, type: 'dm' });
         }
-    }, [activeUserId, messages, socket, user, readReceipts]);
 
-    const sendMessage = async (e) => {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+            setIsTyping(false);
+            socket.emit('typing:stop', { roomId: `user:${activeUserId}` });
+        }, 2000);
+    };
+
+    const sendMessage = (e) => {
         e.preventDefault();
-        if (!input.trim() || !activeUserId) return;
-        try {
-            const { data } = await api.post(`/dm/${activeUserId}`, { text: input.trim() });
-            setMessages(prev => [...prev, data]);
-            setInput('');
-        } catch (error) {
-            console.error('[DM] Failed to send message:', error);
-            toast.error(error.response?.data?.message || 'Message could not be sent');
-        }
+        const text = input.trim();
+        if (!text || !activeUserId || !socket) return;
+
+        const tempId = Date.now().toString();
+        socket.emit('dm:send', { recipientId: activeUserId, text, tempId });
+        
+        // Optimistic UI update
+        const optimisticMsg = {
+            _id: tempId,
+            sender: { _id: user?._id, name: user?.name },
+            text,
+            timestamp: new Date().toISOString(),
+            isOptimistic: true,
+            tempId
+        };
+        setMessages(prev => [...prev, optimisticMsg]);
+        setInput('');
     };
 
     const sendVoiceNote = async (audioBlob) => {
         if (!activeUserId) return;
-        
         const formData = new FormData();
         formData.append('audio', audioBlob, 'voice-note.wav');
-        
         try {
             const { data } = await api.post(`/dm/${activeUserId}/voice`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
+                headers: { 'Content-Type': 'multipart/form-data' }
             });
             setMessages(prev => [...prev, data]);
-        } catch (error) {
-            console.error('[DM] Failed to send voice note:', error);
-            toast.error(error.response?.data?.message || 'Voice note could not be sent');
-        }
+        } catch (err) { toast.error('Failed to send voice note'); }
     };
-
-    const addReaction = async (messageId, emoji) => {
-        try {
-            await api.post(`/dm/${activeUserId}/${messageId}/react`, { emoji });
-            setMessages(prev => prev.map(msg => {
-                if (msg._id === messageId) {
-                    const reactions = msg.reactions || [];
-                    const existingReaction = reactions.find(r => r.emoji === emoji);
-                    
-                    if (existingReaction) {
-                        existingReaction.count = (existingReaction.count || 1) + 1;
-                        if (!existingReaction.users.includes(user._id)) {
-                            existingReaction.users.push(user._id);
-                        }
-                    } else {
-                        reactions.push({
-                            emoji,
-                            count: 1,
-                            users: [user._id]
-                        });
-                    }
-                    
-                    return { ...msg, reactions };
-                }
-                return msg;
-            }));
-        } catch { /* silent */ }
-    };
-
-    const hasUserReacted = (reaction, userId) => {
-        return reaction.users && reaction.users.includes(userId);
-    };
-
-    const getReadReceiptIcon = (message) => {
-        const isOwn = String(message.sender?._id || message.sender) === String(user?._id);
-        if (!isOwn) return null;
-        
-        if (readReceipts.has(message._id)) {
-            return <CheckCheck size={14} className="read-receipt read" />;
-        }
-        return <Check size={14} className="read-receipt sent" />;
-    };
-
-    const renderMessageContent = (msg) => {
-        if (msg.audioURL) {
-            return (
-                <div className="voice-message">
-                    <audio src={msg.audioURL} controls className="voice-message-player" />
-                    <div className="dm-message-actions">
-                        <EmojiPicker 
-                            onEmojiSelect={(emoji) => addReaction(msg._id, emoji)}
-                            position="top"
-                        />
-                    </div>
-                </div>
-            );
-        }
-        
-        return (
-            <div className="dm-message-content">
-                {msg.text}
-                <div className="dm-message-actions">
-                    <EmojiPicker 
-                        onEmojiSelect={(emoji) => addReaction(msg._id, emoji)}
-                        position="top"
-                    />
-                </div>
-            </div>
-        );
-    };
-
-    const activeUser = users.find(u => u._id === activeUserId);
-    const getDisplayName = (candidate) => candidate?.name || candidate?.email || 'User';
-
-    const getInitials = (name = '') =>
-        String(name).split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
     const formatTime = (iso) => {
         const d = new Date(iso);
         return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
 
+    const activeUser = users.find(u => u._id === activeUserId);
+    const getDisplayName = (u) => u?.name || u?.email?.split('@')[0] || 'User';
+    const getInitials = (n = '') => n.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
     return (
-        <AppShell title="Conversation Place" subtitle="Private conversations with your team.">
-            {loading ? <Loader label="Loading messages" /> : (
-                <div className="dm-container">
-                    <div className="dm-sidebar">
-                        <h3>Conversations</h3>
-                        <div className="dm-user-list">
-                            {users.map(u => (
-                                <Link
-                                    key={u._id}
-                                    to={`/dm/${u._id}`}
-                                    className={`dm-user-item ${activeUserId === u._id ? 'dm-user-item--active' : ''}`}
-                                >
-                                    <div className="dm-avatar">
-                                        {getInitials(getDisplayName(u))}
-                                        <span className={`presence-dot ${onlineUsers.has(u._id) ? 'presence-dot--online' : ''}`} />
-                                    </div>
-                                    <div>
-                                        <strong>{getDisplayName(u)}</strong>
-                                        <span>{u.email}</span>
-                                    </div>
-                                    {unreadCounts[u._id] > 0 && (
-                                        <div className="unread-badge">{unreadCounts[u._id]}</div>
-                                    )}
-                                </Link>
-                            ))}
+        <AppShell title="Messages" hideHeader>
+            <div className="wa-container">
+                <div className="wa-sidebar">
+                    <div className="wa-side-header">
+                        <div className="wa-my-avatar">{getInitials(user?.name)}</div>
+                        <div className="wa-side-actions">
+                            <Circle size={20} className={isConnected ? 'text-green-500' : 'text-red-500'} />
+                            <MoreVertical size={20} />
+                        </div>
+                    </div>
+                    
+                    <div className="wa-search">
+                        <div className="wa-search-inner">
+                            <Search size={16} />
+                            <input placeholder="Search or start new chat" />
                         </div>
                     </div>
 
-                    <div className="dm-chat">
-                        {!activeUserId ? (
-                            <div className="dm-empty">
-                                <Circle size={40} opacity={0.2} />
-                                <p>Select a user to start chatting</p>
-                            </div>
-                        ) : (
-                            <>
-                                <div className="dm-chat-header">
-                                    <div className="dm-avatar">
-                                        {getInitials(getDisplayName(activeUser))}
-                                        <span className={`presence-dot ${onlineUsers.has(activeUserId) ? 'presence-dot--online' : ''}`} />
+                    <div className="wa-user-list">
+                        {users.map(u => (
+                            <Link key={u._id} to={`/dm/${u._id}`} className={`wa-user-item ${activeUserId === u._id ? 'active' : ''}`}>
+                                <div className="wa-avatar">
+                                    {getInitials(getDisplayName(u))}
+                                    {onlineUsers.has(String(u._id)) && <span className="wa-online-dot" />}
+                                </div>
+                                <div className="wa-user-info">
+                                    <div className="wa-user-top">
+                                        <span className="wa-user-name">{getDisplayName(u)}</span>
+                                        <span className="wa-user-time">12:45 PM</span>
                                     </div>
-                                    <div>
-                                        <strong>{getDisplayName(activeUser)}</strong>
-                                        <span>
-                                            {activeUser?.email ? `${activeUser.email} · ` : ''}
-                                            {onlineUsers.has(activeUserId) ? 'Online' : 'Offline'}
-                                        </span>
+                                    <div className="wa-user-bottom">
+                                        <span className="wa-last-msg">{u.email}</span>
+                                        {unreadCounts[u._id] > 0 && <span className="wa-unread-badge">{unreadCounts[u._id]}</span>}
                                     </div>
                                 </div>
+                            </Link>
+                        ))}
+                    </div>
+                </div>
 
-                                <div className="dm-messages">
+                <div className="wa-chat">
+                    {!activeUserId ? (
+                        <div className="wa-empty">
+                            <div className="wa-empty-icon">📱</div>
+                            <h1>TaskFlow for Desktop</h1>
+                            <p>Send and receive messages with real-time synchronization.</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="wa-chat-header">
+                                <div className="wa-avatar small">
+                                    {getInitials(getDisplayName(activeUser))}
+                                </div>
+                                <div className="wa-header-info">
+                                    <span className="wa-header-name">{getDisplayName(activeUser)}</span>
+                                    <span className="wa-header-status">
+                                        {typingUser ? 'typing...' : (onlineUsers.has(String(activeUserId)) ? 'online' : 'offline')}
+                                    </span>
+                                </div>
+                                <div className="wa-header-actions">
+                                    <Video size={20} />
+                                    <Phone size={20} />
+                                    <div className="wa-sep" />
+                                    <Search size={20} />
+                                    <MoreVertical size={20} />
+                                </div>
+                            </div>
+
+                            <div className="wa-messages-bg">
+                                <div className="wa-messages">
                                     {messages.map((msg, i) => {
                                         const isOwn = String(msg.sender?._id || msg.sender) === String(user?._id);
+                                        const isRead = readReceipts.has(msg._id);
                                         return (
-                                            <div key={msg._id || i} className={`dm-msg ${isOwn ? 'dm-msg--own' : ''}`}>
-                                                <div className={`dm-bubble ${isOwn ? 'dm-bubble--own' : ''}`}>
-                                                    {renderMessageContent(msg)}
-                                                    
-                                                    {msg.reactions && msg.reactions.length > 0 && (
-                                                        <div className="message-reactions">
-                                                            {msg.reactions.map((reaction, idx) => (
-                                                                <button
-                                                                    key={idx}
-                                                                    className={`message-reaction ${hasUserReacted(reaction, user._id) ? 'message-reaction--reacted' : ''}`}
-                                                                    onClick={() => addReaction(msg._id, reaction.emoji)}
-                                                                >
-                                                                    <span>{reaction.emoji}</span>
-                                                                    <span className="reaction-count">{reaction.count}</span>
-                                                                </button>
-                                                            ))}
+                                            <div key={msg._id || i} className={`wa-msg-row ${isOwn ? 'own' : ''}`}>
+                                                <div className={`wa-bubble ${isOwn ? 'own' : ''}`}>
+                                                    <div className="wa-bubble-content">
+                                                        {msg.audioURL ? (
+                                                            <audio src={msg.audioURL} controls className="wa-audio" />
+                                                        ) : (
+                                                            <span>{msg.text}</span>
+                                                        )}
+                                                        <div className="wa-bubble-meta">
+                                                            <span className="wa-time">{formatTime(msg.timestamp)}</span>
+                                                            {isOwn && (
+                                                                <span className={`wa-ticks ${isRead ? 'read' : ''}`}>
+                                                                    {isRead ? <CheckCheck size={15} /> : <Check size={15} />}
+                                                                </span>
+                                                            )}
                                                         </div>
-                                                    )}
-                                                </div>
-                                                <div className="dm-message-footer">
-                                                    <span className="dm-time">{formatTime(msg.timestamp)}</span>
-                                                    {getReadReceiptIcon(msg)}
+                                                    </div>
                                                 </div>
                                             </div>
                                         );
                                     })}
+                                    {typingUser && (
+                                        <div className="wa-msg-row">
+                                            <div className="wa-bubble typing">
+                                                <div className="typing-dots">
+                                                    <span /> <span /> <span />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                     <div ref={bottomRef} />
                                 </div>
+                            </div>
 
-                                <form className="dm-input-row" onSubmit={sendMessage}>
+                            <div className="wa-input-footer">
+                                <div className="wa-footer-actions">
+                                    <Smile size={24} />
+                                    <Paperclip size={24} />
+                                </div>
+                                <form className="wa-input-form" onSubmit={sendMessage}>
                                     <input
-                                        className="chat-input"
+                                        className="wa-main-input"
+                                        placeholder="Type a message"
                                         value={input}
-                                        onChange={e => setInput(e.target.value)}
-                                        placeholder="Type a message…"
+                                        onChange={handleInputChange}
                                         autoComplete="off"
                                     />
-                                    <VoiceRecorder onSend={sendVoiceNote} disabled={!activeUserId} />
-                                    <button type="submit" className="chat-send-btn" disabled={!input.trim()}>
-                                        <Send size={16} />
+                                    <button type="submit" className="wa-send-btn" disabled={!input.trim()}>
+                                        <Send size={20} fill={input.trim() ? "#00a884" : "none"} stroke={input.trim() ? "#00a884" : "currentColor"} />
                                     </button>
                                 </form>
-                            </>
-                        )}
-                    </div>
+                                <VoiceRecorder onSend={sendVoiceNote} />
+                            </div>
+                        </>
+                    )}
                 </div>
-            )}
+            </div>
         </AppShell>
     );
 };

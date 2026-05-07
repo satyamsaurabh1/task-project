@@ -42,8 +42,8 @@ if (process.env.NODE_ENV === 'development') {
 // Rate Limiting
 if (process.env.NODE_ENV === 'production') {
     const limiter = rateLimit({
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        max: 100, // Limit each IP to 100 requests per window
+        windowMs: 15 * 60 * 1000,
+        max: 100,
         standardHeaders: true,
         legacyHeaders: false,
         message: 'Too many requests from this IP, please try again after 15 minutes'
@@ -61,14 +61,10 @@ app.use(hpp());
 // Compression
 app.use(compression());
 
-// Static file serving
+// Static file serving for uploads
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// 2. ROUTES
-app.get('/', (req, res) => {
-    res.send('TaskFlow API is running 🚀');
-});
-
+// 2. API ROUTES
 app.get('/api/health', (req, res) => {
     res.status(200).json({ 
         status: 'success',
@@ -85,7 +81,25 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/dm', dmRoutes);
 app.use('/api', uploadRoutes);
 
-// 3. ERROR HANDLING
+// 3. FRONTEND SERVING (PRODUCTION)
+if (process.env.NODE_ENV === 'production') {
+    const frontendBuildPath = path.join(__dirname, '../../taskflow-frontend/dist');
+    app.use(express.static(frontendBuildPath));
+
+    app.get('*', (req, res, next) => {
+        // Skip for API routes
+        if (req.path.startsWith('/api')) {
+            return next();
+        }
+        res.sendFile(path.join(frontendBuildPath, 'index.html'));
+    });
+} else {
+    app.get('/', (req, res) => {
+        res.send('TaskFlow API is running 🚀');
+    });
+}
+
+// 4. ERROR HANDLING
 app.use(notFound);
 app.use(errorHandler);
 

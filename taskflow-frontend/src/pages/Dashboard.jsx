@@ -2,7 +2,7 @@ import { useDeferredValue, useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { 
-    ArrowRight, FolderPlus, Wifi, WifiOff, Zap, 
+    ArrowRight, FolderPlus, Zap, 
     AlertTriangle, Bell, Clock, MessageSquare, UserPlus, Check 
 } from 'lucide-react';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
@@ -10,9 +10,10 @@ import AppShell from '../components/AppShell';
 import EmptyState from '../components/EmptyState';
 import Loader from '../components/Loader';
 import GamificationBadge from '../components/GamificationBadge';
+import SocketStatusBadge from '../components/SocketStatusBadge';
 import * as projectService from '../services/projectService';
 import * as taskService from '../services/taskService';
-import useSocket from '../hooks/useSocket';
+import { useSocket } from '../context/SocketContext';
 import useAuth from '../hooks/useAuth';
 import { generateSuggestions } from '../utils/aiSuggestions';
 import useNotifications from '../hooks/useNotifications';
@@ -35,7 +36,7 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const deferredSearch = useDeferredValue(search);
-    const { socket, isConnected } = useSocket();
+    const { socket } = useSocket();
     const { user } = useAuth();
     const { notifications, markRead } = useNotifications();
     const dashboardStats = stats || EMPTY_STATS;
@@ -140,10 +141,7 @@ const Dashboard = () => {
             subtitle="Track projects, workload, and progress from a single operational view."
             actions={(
                 <>
-                    <div className={`ws-badge ${isConnected ? 'ws-badge--live' : 'ws-badge--offline'}`}>
-                        {isConnected ? <Wifi size={13} /> : <WifiOff size={13} />}
-                        {isConnected ? 'Live' : 'Offline'}
-                    </div>
+                    <SocketStatusBadge />
                     <input
                         className="text-input search-input"
                         value={search}

@@ -13,6 +13,15 @@ const ChatSection = ({ projectId, projectTitle, currentUser }) => {
     const scrollRef = useRef(null);
     const typingTimeoutRef = useRef(null);
 
+    // ── Room joining ─────────────────────────────────────────────
+    useEffect(() => {
+        if (!socket || !projectId) return;
+        socket.emit('join:project', projectId);
+        return () => {
+            socket.emit('leave:project', projectId);
+        };
+    }, [socket, projectId]);
+
     // Load Chat History
     useEffect(() => {
         const loadHistory = async () => {
@@ -23,8 +32,6 @@ const ChatSection = ({ projectId, projectTitle, currentUser }) => {
             } catch (error) {
                 console.error('Failed to load chat history:', error);
                 toast.error('Could not load message history');
-            } finally {
-                // Intentionally no loading UI for chat history yet.
             }
         };
         loadHistory();
@@ -33,14 +40,24 @@ const ChatSection = ({ projectId, projectTitle, currentUser }) => {
     useEffect(() => {
         if (!socket) return;
 
-        const onMessage = (msg) => {
-            setMessages((prev) => [...prev, msg]);
+        const onMessage = (msg, tempId) => {
+            setMessages((prev) => {
+                const existingIdx = prev.findIndex(m => 
+                    (m._id === msg._id) || (tempId && m.tempId === tempId)
+                );
+                if (existingIdx > -1) {
+                    const next = [...prev];
+                    next[existingIdx] = msg;
+                    return next;
+                }
+                return [...prev, msg];
+            });
             scrollToBottom();
         };
 
-        const onTyping = ({ user: typist, isTyping }) => {
-            if (String(typist?._id || typist?.id) === String(currentUser?._id || currentUser?.id)) return;
-            setTypingUser(isTyping ? typist.name : null);
+        const onTyping = ({ userId, name, typing }) => {
+            if (String(userId) === String(currentUser?._id || currentUser?.id)) return;
+            setTypingUser(typing ? name : null);
         };
 
         socket.on('chat:message', onMessage);
@@ -62,6 +79,7 @@ const ChatSection = ({ projectId, projectTitle, currentUser }) => {
         e.preventDefault();
         if (!newMessage.trim() || !socket) return;
 
+        const tempId = Date.now().toString();
         const messageData = {
             projectId,
             text: newMessage.trim(),
@@ -70,7 +88,8 @@ const ChatSection = ({ projectId, projectTitle, currentUser }) => {
                 name: currentUser.name,
                 email: currentUser.email
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            tempId
         };
 
         socket.emit('chat:send', messageData);

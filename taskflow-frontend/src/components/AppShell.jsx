@@ -8,8 +8,9 @@ import toast from 'react-hot-toast';
 import useAuth from '../hooks/useAuth';
 import useTheme from '../hooks/useTheme';
 import useNotifications from '../hooks/useNotifications';
-import useSocket from '../hooks/useSocket';
+import { useSocket } from '../context/SocketContext';
 import NotificationPanel from './NotificationPanel';
+import SocketStatusBadge from './SocketStatusBadge';
 
 const formatRoleLabel = (role) => {
     if (!role) {
@@ -44,7 +45,6 @@ const AppShell = ({ title, subtitle, actions, children }) => {
         const onReminder = (data) => toast(`⏰ Due soon: "${data.taskTitle}"`, { duration: 6000 });
 
         const onDmReceived = ({ fromUserId, message }) => {
-            // Check if we're on the DM page for this specific user
             const isOnDmPageWithUser = window.location.pathname === `/dm/${fromUserId}`;
             if (!isOnDmPageWithUser) {
                 const senderName = message.sender?.name || 'Someone';
@@ -89,6 +89,10 @@ const AppShell = ({ title, subtitle, actions, children }) => {
                     <div>
                         <strong style={{ letterSpacing: '-0.02em', fontSize: '1.2rem' }}>TaskFlow</strong>
                     </div>
+                </div>
+
+                <div style={{ padding: '0 16px 16px' }}>
+                    <SocketStatusBadge />
                 </div>
 
                 <nav className="nav-stack">

@@ -1,160 +1,179 @@
 const Message = require('../models/Message');
 const notificationService = require('../services/notificationService');
-const Project = require('../models/Project');
 
-// Track online users: userId -> Set of socket IDs
+// Thread-safe map for online users: userId (string) -> Set of socket IDs
 const onlineUsers = new Map();
 
+/**
+ * Registers all real-time event handlers.
+ * @param {import('socket.io').Server} io 
+ */
 const registerSocketHandlers = (io) => {
     io.on('connection', (socket) => {
         const user = socket.data.user;
-        if (!user) return;
-        const userId = String(user._id || user.id);
+        if (!user) {
+            socket.disconnect(true);
+            return;
+        }
 
-        console.log(`[WS] Connected: ${user?.name || userId} (${socket.id})`);
+        const userId = String(user.id);
+        console.log(`[WS] Connection Established: ${user.name} [ID: ${userId}] [SID: ${socket.id}]`);
 
-        // ── Personal room (for DMs and notifications) ──
+        // 1. Join Personal Room
         socket.join(`user:${userId}`);
 
-        // ── Track online status ──
+        // 2. Track Online Status
         if (!onlineUsers.has(userId)) {
             onlineUsers.set(userId, new Set());
+            // Broadcast only when the FIRST socket for this user connects
+            io.emit('user:online', { userId, name: user.name });
+            console.log(`[WS] User ${user.name} is now globally ONLINE`);
         }
         onlineUsers.get(userId).add(socket.id);
-        io.emit('user:online', { userId, name: user.name });
 
-        // Always join the global projects room
+        // 3. Join Global Projects Broadcaster
         socket.join('projects');
 
-        // ── Project rooms ──────────────────────────────
-        socket.on('join:project', (projectId) => {
-            if (!projectId) return;
-            socket.join(`project:${projectId}`);
-            console.log(`[WS] ${user?.name} joined project room: ${projectId}`);
-
-            const room = io.sockets.adapter.rooms.get(`project:${projectId}`);
-            io.to(`project:${projectId}`).emit('room:users', { count: room?.size || 1 });
+        // 4. Presence Request (Sync existing online users for the new client)
+        socket.on('users:online:request', () => {
+            const list = Array.from(onlineUsers.keys());
+            socket.emit('users:online:list', list);
         });
 
-        socket.on('leave:project', (projectId) => {
+        // 5. Project Room Management
+        socket.on('project:join', (projectId) => {
+            if (!projectId) return;
+            const roomName = `project:${projectId}`;
+            socket.join(roomName);
+            
+            // Sync current participants count
+            const room = io.sockets.adapter.rooms.get(roomName);
+            io.to(roomName).emit('project:presence', { 
+                projectId, 
+                count: room ? room.size : 0 
+            });
+        });
+
+        socket.on('project:leave', (projectId) => {
             if (!projectId) return;
             socket.leave(`project:${projectId}`);
-            const room = io.sockets.adapter.rooms.get(`project:${projectId}`);
-            io.to(`project:${projectId}`).emit('room:users', { count: room?.size || 0 });
         });
 
-        // ── Chat ──────────────────────────────────────
-        socket.on('chat:send', async (messageData) => {
-            const { projectId, text } = messageData;
+        // 6. Real-time Messaging (Projects)
+        socket.on('chat:send', async (payload) => {
+            const { projectId, text, tempId } = payload;
             if (!projectId || !text?.trim()) return;
 
             try {
-                const savedMessage = await Message.create({
+                const saved = await Message.create({
                     projectId,
                     sender: user._id,
                     text: text.trim()
                 });
 
-                const populatedMessage = {
-                    _id: savedMessage._id,
-                    projectId,
-                    text: savedMessage.text,
+                const broadcastMsg = {
+                    ...saved.toObject(),
                     sender: {
                         _id: user._id,
-                        id: user._id,
+                        id: user.id,
                         name: user.name,
                         email: user.email
                     },
-                    timestamp: savedMessage.createdAt
+                    timestamp: saved.createdAt
                 };
 
-                socket.to(`project:${projectId}`).emit('chat:message', populatedMessage);
+                // Emit to the project room (including sender for tempId resolution)
+                io.to(`project:${projectId}`).emit('chat:message', {
+                    message: broadcastMsg,
+                    tempId
+                });
 
-                // Handle @mentions
-                const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)/g;
-                let match;
-                while ((match = mentionRegex.exec(text)) !== null) {
-                    const mentionedUserId = match[2];
-                            if (mentionedUserId !== userId) {
-                        await notificationService.createNotification({
-                            userId: mentionedUserId,
-                            type: 'mention',
-                            title: `${user.name} mentioned you`,
-                            message: text.slice(0, 100),
-                            projectId,
-                            fromUser: userId,
-                            link: `/projects/${projectId}`
-                        });
-                        io.to(`user:${mentionedUserId}`).emit('notification:new', {
-                            type: 'mention',
-                            title: `${user.name} mentioned you`,
-                            message: text.slice(0, 100)
-                        });
+                // Handle Mentions (Integration with notification service)
+                const mentions = text.match(/@\[([^\]]+)\]\(([^)]+)\)/g);
+                if (mentions) {
+                    for (const mention of mentions) {
+                        const mUserId = mention.match(/\(([^)]+)\)/)[1];
+                        if (mUserId !== userId) {
+                            const notif = await notificationService.createNotification({
+                                userId: mUserId,
+                                type: 'mention',
+                                title: 'New Mention',
+                                message: `${user.name} mentioned you in a project.`,
+                                projectId,
+                                fromUser: user._id,
+                                link: `/projects/${projectId}`
+                            });
+                            io.to(`user:${mUserId}`).emit('notification:new', notif);
+                        }
                     }
                 }
-
-                console.log(`[CHAT] Message saved for project ${projectId}`);
-            } catch (error) {
-                console.error('[CHAT] Failed to save message:', error);
+            } catch (err) {
+                console.error('[WS] Chat Error:', err);
+                socket.emit('error', { message: 'Failed to send message' });
             }
         });
 
-        // ── Typing indicators ──────────────────────────
-        socket.on('typing:start', ({ projectId }) => {
-            if (!projectId) return;
-            socket.to(`project:${projectId}`).emit('typing:status', {
-                userId,
-                name: user?.name,
-                typing: true,
-            });
-        });
-
-        socket.on('typing:stop', ({ projectId }) => {
-            if (!projectId) return;
-            socket.to(`project:${projectId}`).emit('typing:status', {
-                userId,
-                name: user?.name,
-                typing: false,
-            });
-        });
-
-        // ── Direct Messages ────────────────────────────
-        socket.on('dm:send', async ({ recipientId, text }) => {
+        // 7. Direct Messaging (DMs)
+        socket.on('dm:send', async (payload) => {
+            const { recipientId, text, tempId } = payload;
             if (!recipientId || !text?.trim()) return;
+
             try {
                 const { sendMessage } = require('../services/dmService');
                 const message = await sendMessage(userId, recipientId, text);
-                const payload = {
-                    ...message,
-                    sender: { _id: userId, name: user.name, email: user.email }
+                
+                const dmPayload = {
+                    ...message.toObject(),
+                    sender: { _id: user._id, id: user.id, name: user.name }
                 };
-                io.to(`user:${recipientId}`).emit('dm:received', { fromUserId: userId, message: payload });
-            } catch (error) {
-                console.error('[DM] Failed:', error);
+
+                // Deliver to recipient AND sender (for multi-device sync)
+                io.to(`user:${recipientId}`).to(`user:${userId}`).emit('dm:received', {
+                    fromUserId: userId,
+                    message: dmPayload,
+                    tempId
+                });
+            } catch (err) {
+                console.error('[WS] DM Error:', err);
             }
         });
 
-        // ── Get online users list ──────────────────────
-        socket.on('users:online', () => {
-            const onlineList = Array.from(onlineUsers.keys());
-            socket.emit('users:online:list', onlineList);
+        // 8. Typing Indicators
+        socket.on('typing:start', ({ roomId, type }) => {
+            // Generic typing handler for both project rooms and user rooms
+            socket.to(roomId).emit('typing:status', {
+                userId,
+                name: user.name,
+                typing: true,
+                type // 'project' or 'dm'
+            });
         });
 
-        // ── Disconnect ────────────────────────────────
-        socket.on('disconnect', () => {
+        socket.on('typing:stop', ({ roomId }) => {
+            socket.to(roomId).emit('typing:status', {
+                userId,
+                typing: false
+            });
+        });
+
+        // 9. Disconnection Handler
+        socket.on('disconnect', (reason) => {
+            console.log(`[WS] Client Disconnecting: ${user.name} [Reason: ${reason}]`);
+            
             const userSockets = onlineUsers.get(userId);
             if (userSockets) {
                 userSockets.delete(socket.id);
                 if (userSockets.size === 0) {
                     onlineUsers.delete(userId);
+                    // Broadcast offline status only if NO sockets remain for this user
                     io.emit('user:offline', { userId });
+                    console.log(`[WS] User ${user.name} is now globally OFFLINE`);
                 }
             }
-            console.log(`[WS] Disconnected: ${socket.id}`);
         });
     });
 };
 
-const getOnlineUsers = () => Array.from(onlineUsers.keys());
+const getOnlineUsersCount = () => onlineUsers.size;
 
-module.exports = { registerSocketHandlers, getOnlineUsers };
+module.exports = { registerSocketHandlers, getOnlineUsersCount };

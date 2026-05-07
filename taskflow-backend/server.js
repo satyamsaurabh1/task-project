@@ -14,62 +14,58 @@ process.on('uncaughtException', (err) => {
     process.exit(1);
 });
 
-const PORT = process.env.PORT || 5000;
-let httpServer;
+// Cloud Run provides the PORT environment variable.
+const PORT = process.env.PORT || 8080;
+const HOST = '0.0.0.0'; // Essential for Cloud Run
 
-// 2. CONNECT DATABASE & START SERVER
-connectDB()
-    .then(async () => {
-        await bootstrapRootAdmin();
-        httpServer = http.createServer(app);
-        
-        // Initialize WebSockets
-        const io = initSocket(httpServer);
-        registerSocketHandlers(io);
-        startDeadlineChecker(io);
+const httpServer = http.createServer(app);
 
-        httpServer.listen(PORT, () => {
-            console.log(`🚀 Server running in ${process.env.NODE_ENV || 'production'} mode on port ${PORT}`);
-            if (process.env.NODE_ENV === 'development') {
-                console.log(`📡 WebSocket server ready on ws://localhost:${PORT}`);
-            }
+// Initialize WebSockets immediately
+const io = initSocket(httpServer);
+registerSocketHandlers(io);
+startDeadlineChecker(io);
+
+// 2. START SERVER IMMEDIATELY
+// We start listening before the DB connection to satisfy Cloud Run's health checks.
+httpServer.listen(PORT, HOST, () => {
+    console.log(`🚀 Server listening on ${HOST}:${PORT}`);
+    console.log(`📡 WebSocket server ready`);
+    
+    // 3. CONNECT DATABASE IN BACKGROUND
+    connectDB()
+        .then(async () => {
+            console.log('✅ Database connected successfully');
+            await bootstrapRootAdmin();
+        })
+        .catch((error) => {
+            console.error(`❌ Database connection failed: ${error.message}`);
+            // In a production app, you might want to retry here
         });
+});
 
-        // Handle Server Errors
-        httpServer.on('error', (error) => {
-            if (error.code === 'EADDRINUSE') {
-                console.error(`❌ Port ${PORT} is already in use.`);
-                process.exit(1);
-            } else {
-                console.error(`❌ Server error: ${error.message}`);
-            }
-        });
-    })
-    .catch((error) => {
-        console.error(`❌ Failed to start database: ${error.message}`);
+// Handle Server Errors
+httpServer.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+        console.error(`❌ Port ${PORT} is already in use.`);
         process.exit(1);
-    });
+    } else {
+        console.error(`❌ Server error: ${error.message}`);
+    }
+});
 
-// 3. UNHANDLED REJECTION HANDLER
+// 4. UNHANDLED REJECTION HANDLER
 process.on('unhandledRejection', (err) => {
     console.error('❌ UNHANDLED REJECTION! Shutting down...');
     console.error(err.name, err.message);
-    if (httpServer) {
-        httpServer.close(() => {
-            process.exit(1);
-        });
-    } else {
+    httpServer.close(() => {
         process.exit(1);
-    }
+    });
 });
 
-// 4. SIGTERM HANDLER (for Render/Heroku deployments)
+// 5. SIGTERM HANDLER
 process.on('SIGTERM', () => {
     console.log('👋 SIGTERM RECEIVED. Shutting down gracefully');
-    if (httpServer) {
-        httpServer.close(() => {
-            console.log('💥 Process terminated!');
-        });
-    }
+    httpServer.close(() => {
+        console.log('💥 Process terminated!');
+    });
 });
-

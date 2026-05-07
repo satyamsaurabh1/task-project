@@ -34,6 +34,15 @@ const ProjectChat = ({ projectId, projectTitle, currentUser }) => {
     const typingTimerRef = useRef({});
     const isTypingRef = useRef(false);
 
+    // ── Room joining ─────────────────────────────────────────────
+    useEffect(() => {
+        if (!socket || !projectId) return;
+        socket.emit('join:project', projectId);
+        return () => {
+            socket.emit('leave:project', projectId);
+        };
+    }, [socket, projectId]);
+
     // ── Fetch history ──────────────────────────────────────────
     useEffect(() => {
         const fetchHistory = async () => {
@@ -54,17 +63,24 @@ const ProjectChat = ({ projectId, projectTitle, currentUser }) => {
     useEffect(() => {
         if (!socket) return;
 
-        const onMessage = (msg) => {
+        const onMessage = (msg, tempId) => {
             // Only add if it's not already there (to avoid duplicates from optimistic updates)
             setMessages((prev) => {
-                if (prev.find(m => m._id === msg._id)) return prev;
+                const existingIdx = prev.findIndex(m => 
+                    (m._id === msg._id) || (tempId && m.tempId === tempId)
+                );
+                if (existingIdx > -1) {
+                    const next = [...prev];
+                    next[existingIdx] = msg;
+                    return next;
+                }
                 return [...prev, msg];
             });
             if (!open) setUnread((n) => n + 1);
         };
 
         const onTyping = ({ userId, name, typing }) => {
-            if (userId === currentUser?._id) return;
+            if (String(userId) === String(currentUser?._id || currentUser?.id)) return;
             setTypingUsers((prev) => {
                 const next = { ...prev };
                 if (typing) {
@@ -136,7 +152,7 @@ const ProjectChat = ({ projectId, projectTitle, currentUser }) => {
         };
 
         setMessages((prev) => [...prev, optimisticMsg]);
-        socket.emit('chat:send', { projectId, text });
+        socket.emit('chat:send', { projectId, text, tempId });
         setInput('');
     };
 
