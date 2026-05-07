@@ -1,71 +1,47 @@
+console.log('>>> [BOOT] Starting TaskFlow Server...');
+
 require('dotenv').config();
 const http = require('http');
-const app = require('./src/app');
-const connectDB = require('./src/config/db');
-const { initSocket } = require('./src/config/socket');
-const { registerSocketHandlers } = require('./src/sockets/socketHandler');
-const { startDeadlineChecker } = require('./src/jobs/deadlineChecker');
-const bootstrapRootAdmin = require('./src/utils/bootstrapRootAdmin');
+const express = require('express');
 
-// 1. UNCAUGHT EXCEPTION HANDLER
-process.on('uncaughtException', (err) => {
-    console.error('❌ UNCAUGHT EXCEPTION! Shutting down...');
-    console.error(err.name, err.message, err.stack);
-    process.exit(1);
-});
+// We use a small wrapper app to ensure the port opens INSTANTLY
+const bootstrapApp = express();
+const httpServer = http.createServer(bootstrapApp);
 
-// Cloud Run provides the PORT environment variable.
 const PORT = process.env.PORT || 8080;
-const HOST = '0.0.0.0'; // Essential for Cloud Run
+const HOST = '0.0.0.0';
 
-const httpServer = http.createServer(app);
+console.log(`>>> [BOOT] Attempting to listen on ${HOST}:${PORT}`);
 
-// Initialize WebSockets immediately
-const io = initSocket(httpServer);
-registerSocketHandlers(io);
-startDeadlineChecker(io);
-
-// 2. START SERVER IMMEDIATELY
-// We start listening before the DB connection to satisfy Cloud Run's health checks.
+// 1. OPEN PORT IMMEDIATELY (Passes Cloud Run health check)
 httpServer.listen(PORT, HOST, () => {
-    console.log(`🚀 Server listening on ${HOST}:${PORT}`);
-    console.log(`📡 WebSocket server ready`);
-    
-    // 3. CONNECT DATABASE IN BACKGROUND
-    connectDB()
-        .then(async () => {
-            console.log('✅ Database connected successfully');
-            await bootstrapRootAdmin();
-        })
-        .catch((error) => {
-            console.error(`❌ Database connection failed: ${error.message}`);
-            // In a production app, you might want to retry here
-        });
-});
+    console.log(`>>> [SUCCESS] Port ${PORT} is open.`);
 
-// Handle Server Errors
-httpServer.on('error', (error) => {
-    if (error.code === 'EADDRINUSE') {
-        console.error(`❌ Port ${PORT} is already in use.`);
-        process.exit(1);
-    } else {
-        console.error(`❌ Server error: ${error.message}`);
+    // 2. LOAD REAL LOGIC IN BACKGROUND
+    try {
+        const app = require('./src/app');
+        const { initSocket } = require('./src/config/socket');
+        const { registerSocketHandlers } = require('./src/sockets/socketHandler');
+        const connectDB = require('./src/config/db');
+
+        // Connect real app to the already-running server
+        httpServer.on('request', app);
+        
+        // Init Sockets
+        const io = initSocket(httpServer);
+        registerSocketHandlers(io);
+        
+        // Connect Database
+        connectDB()
+            .then(() => console.log('>>> [DB] Connected successfully'))
+            .catch(err => console.error('>>> [DB] Connection failed:', err.message));
+
+    } catch (err) {
+        console.error('>>> [FATAL] Error during background load:', err);
     }
 });
 
-// 4. UNHANDLED REJECTION HANDLER
-process.on('unhandledRejection', (err) => {
-    console.error('❌ UNHANDLED REJECTION! Shutting down...');
-    console.error(err.name, err.message);
-    httpServer.close(() => {
-        process.exit(1);
-    });
-});
-
-// 5. SIGTERM HANDLER
-process.on('SIGTERM', () => {
-    console.log('👋 SIGTERM RECEIVED. Shutting down gracefully');
-    httpServer.close(() => {
-        console.log('💥 Process terminated!');
-    });
+// Handle global crashes
+process.on('uncaughtException', (err) => {
+    console.error('>>> [UNCAUGHT EXCEPTION]', err);
 });

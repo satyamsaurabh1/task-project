@@ -86,7 +86,8 @@ if (process.env.NODE_ENV === 'production') {
     const frontendBuildPath = path.join(__dirname, '../../taskflow-frontend/dist');
     app.use(express.static(frontendBuildPath));
 
-    app.get('*', (req, res, next) => {
+    // Express v5 requires /* or (.*) for catch-all routes
+    app.get('/*', (req, res, next) => {
         // Skip for API routes
         if (req.path.startsWith('/api')) {
             return next();
